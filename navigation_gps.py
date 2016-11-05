@@ -28,13 +28,22 @@ for line in obs_file:
     elif 'END OF HEADER' in line:
         break   
 
+#p2 = 
+obs_nr = int(header[2][:6].strip()) #number of different observation types
+# will is use the next line if obs_nr > 8 or 9???
+obs_types = []
+# iterate over line with steps of 6 chars
+# 9 iterations = nr of possible observation types in 1 line
+for col in range(6,59,6):
+    obs_types.append(header[2][col:col+6].strip())
+
 ################################
 ### READING THE OBSERVATIONS ###
 ################################
     
 data = {}
 data['observations'] = []
-while i < len(obs_file): #!!!MAKE SURE YOU DON'T PRINT THE DATA!!!
+while i < 91: #!!!MAKE SURE YOU DON'T PRINT THE DATA!!!
     print 'START'
     dic = {}
     cur_line = obs_file[i]
@@ -48,7 +57,7 @@ while i < len(obs_file): #!!!MAKE SURE YOU DON'T PRINT THE DATA!!!
 
     # find first letter in line
     for char in cur_line:
-        if char in 'GR':
+        if char in 'GRSE':
             char_idx = cur_line.find(char)
             break
 
@@ -76,17 +85,23 @@ while i < len(obs_file): #!!!MAKE SURE YOU DON'T PRINT THE DATA!!!
     dic['flag'] = flag
     dic['satellite_info'] = {}
     for sat_name in sat_names:
-        dic['satellite_info'][sat_name] = []
+        dic['satellite_info'][sat_name] = {}
 
+    cur_line = obs_file[i+1]
+        
     #read epoch observations
     for cnt,i in enumerate(range(i,i+nr_sats)):
-        dic['satellite_info'][sat_names[cnt]].append(obs_file[i][:-1])
-    
-    epoch_nr += 1
-    i += 1
+        cur_line = obs_file[i]
+        # get each observation and add it to the dict
+        for idx,col in enumerate(range(0,len(cur_line[:-1]),16)):          
+            dic['satellite_info'][sat_names[cnt]][obs_types[idx]] = cur_line[col:col+16].strip()
+
     data['observations'].append(dic)
+    i += 1 # go to nect line
+    epoch_nr += 1
     print 'NEXT EPOCH'
     
     
-print len(data['observations'])
+for sat in data['observations'][0]['satellite_info']:
+    print data['observations'][0]['satellite_info'][sat]['P2']
 
