@@ -148,6 +148,7 @@ for epoch in data['observations']:
     #print time
     #print obs_time
     #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
+    cnt = 0
     for i in range(i, len(nav_file),8):
         line = nav_file[i]
         y = int(line[3:6])
@@ -164,21 +165,26 @@ for epoch in data['observations']:
         delta_time = abs(obs_time-nav_time)
 
         hour = 1/24.0
+        
         if delta_time < hour:
+            print cnt
             nav_sat = int(line[:2])
-            
+            print 'NAV SAT', nav_sat
             for k in epoch['satellite_info']:
+                #print k
                 if k[0:1] == 'G' and int(k[1:]) == nav_sat:
-                    #print nav_sat
+                    #print 'nav sat', nav_sat
                     params_lst = []
                     for idx in range(22,len(line)-1,19):
                         params_lst.append(line[idx:idx+19])
-                    #print params_lst
+                    #print len(params_lst)
                         
                     #for param_line in range(i,i+8):
                         
                     #params = line+
                     epoch['satellite_info'][k]['params'] = line
+            print 'next nav obs'
+            cnt += 1
             #print 'NAV SAT NR', nav_sat
             #if... 
             #epoch['observation
@@ -187,6 +193,7 @@ for epoch in data['observations']:
             #print line[3:22]
             #print delta_time
             #print
+        #print i
     break
     #print delta_time
 ##    print nav_file[i]
