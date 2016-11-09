@@ -34,6 +34,7 @@ obs_types = []
 # 9 iterations = nr of possible observation types in 1 line
 for idx in range(6,59,6):
     obs_types.append(header[2][idx:idx+6].strip())
+print obs_types
 
 ################################
 ### READING THE OBSERVATIONS ###
@@ -42,10 +43,10 @@ for idx in range(6,59,6):
 i += 1 # go to next line   
 data = {}
 data['observations'] = []
-
+epoch_nr = 1
 while i < len(obs_file):
-    print 'START EPOCH'
-    epoch_nr = 1
+    #print 'START EPOCH'
+    
     cur_line = obs_file[i]
     next_line = obs_file[i+1]
 
@@ -82,6 +83,7 @@ while i < len(obs_file):
     dic['day'] = epoch[2]
     dic['hour'] = epoch[3]
     dic['min'] = epoch[4]
+    dic['sec'] = epoch[5]
     dic['flag'] = flag
     dic['satellite_info'] = {}
     for sat_name in sat_names:
@@ -99,8 +101,43 @@ while i < len(obs_file):
     data['observations'].append(dic) #append the observation data to the dict
     epoch_nr += 1
     i += nr_sats
-    print 'NEXT EPOCH'
+    #print 'NEXT EPOCH'
     
-# TESTING    
-for sat in data['observations'][0]['satellite_info']:
-    print sat,data['observations'][0]['satellite_info'][sat]['P2']
+# TESTING
+##print data['observations'][0]['satellite_info']['G02']['P2']
+##for sat in data['observations'][0]['satellite_info']:
+##    print sat,data['observations'][0]['satellite_info'][sat]['P2']
+
+####################################
+### READING THE NAVIGATION FILE ###
+####################################
+
+nav_input = open('brdc0590.11n','r')
+nav_file = nav_input.readlines()
+nav_input.close()
+
+nav_header = []
+i = 0 # i can be seen as the line number
+for i,line in enumerate(nav_file):
+    if 'ION ALPHA' in line:
+        nav_header.append(line)
+    elif 'ION BETA' in line:
+        nav_header.append(line)
+    elif 'LEAP SECONDS' in line:
+        nav_header.append(line)
+    elif 'END OF HEADER' in line:
+        break
+#print nav_header
+
+# reading first line of navigation file is not possible to check whether it is a GPS navigation file
+
+i +=1
+
+for epoch in data['observations']:
+    print epoch['epoch'], epoch['year'], epoch['month'], epoch['day'], epoch['hour'], epoch['min'], epoch['sec']
+
+    
+##for i in range(i, len(nav_file),8):
+##    print nav_file[i]
+
+
