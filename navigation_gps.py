@@ -34,7 +34,6 @@ obs_types = []
 # 9 iterations = nr of possible observation types in 1 line
 for idx in range(6,59,6):
     obs_types.append(header[2][idx:idx+6].strip())
-print obs_types
 
 ################################
 ### READING THE OBSERVATIONS ###
@@ -131,13 +130,68 @@ for i,line in enumerate(nav_file):
 
 # reading first line of navigation file is not possible to check whether it is a GPS navigation file
 
-i +=1
+i +=1 # got to next line
+
+def GDtoJD(d,m,y,hh,mm,ss):
+    #representing time as a real number
+    hour = hh+mm/60.0+ss/3600.0
+
+    if m <= 2:
+        y = y-1
+        m = m+12
+    JD = int(365.25*y)+int(30.6001*(m+1))+d+hour/24.0+1720981.5
+    return JD
+
 
 for epoch in data['observations']:
-    print epoch['epoch'], epoch['year'], epoch['month'], epoch['day'], epoch['hour'], epoch['min'], epoch['sec']
+    obs_time = GDtoJD(int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec']))
+    #print time
+    #print obs_time
+    #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
+    for i in range(i, len(nav_file),8):
+        line = nav_file[i]
+        y = int(line[3:6])
+        m = int(line[6:9])
+        d = int(line[9:11])
+        hh = int(line[11:14])
+        mm = int(line[14:17])
+        ss = float(line[17:22])
+        #print y,m,d,hh,mm,ss
+        #print line[3:22]
+        nav_time = GDtoJD(d,m,y,hh,mm,ss)
+        #print 'OBS TIME', obs_time
+        #print 'NAV TIME', nav_time
+        delta_time = abs(obs_time-nav_time)
 
-    
-##for i in range(i, len(nav_file),8):
+        hour = 1/24.0
+        if delta_time < hour:
+            nav_sat = int(line[:2])
+            
+            for k in epoch['satellite_info']:
+                if k[0:1] == 'G' and int(k[1:]) == nav_sat:
+                    #print nav_sat
+                    params_lst = []
+                    for idx in range(22,len(line)-1,19):
+                        params_lst.append(line[idx:idx+19])
+                    #print params_lst
+                        
+                    #for param_line in range(i,i+8):
+                        
+                    #params = line+
+                    epoch['satellite_info'][k]['params'] = line
+            #print 'NAV SAT NR', nav_sat
+            #if... 
+            #epoch['observation
+            #print 'yes'
+            #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
+            #print line[3:22]
+            #print delta_time
+            #print
+    break
+    #print delta_time
 ##    print nav_file[i]
 
+#print data['observations'][0]['satellite_info']
 
+for k in data['observations'][0]['satellite_info']:
+    print k
