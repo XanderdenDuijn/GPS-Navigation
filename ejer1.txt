@@ -1,0 +1,22 @@
+from math import *
+
+year= input("Introduce el year: ")
+month= input("Introduce el mes del year: ")
+day= input("Introduce el dia en el que estamos: ")
+hour= input("Introduce la hora: ")
+minutes=input("Intruduce los minutos: ")
+seconds= input("Introduce los segundos: ")
+
+h=hour+(minutes/60.0)+(seconds/3600.0)
+def G2J(year,month,day,h):
+
+    if month <= 2:
+        y= year-1.0
+        m=month+12.0
+    if month > 2 :
+        y=year
+        m=month
+    JD= int(365.25*y)+int(30.6001*(m+1))+day+(h/24.0)+1720981.5
+    return JD
+
+print G2J(year,month,day,h)
