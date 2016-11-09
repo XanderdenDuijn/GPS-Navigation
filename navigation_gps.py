@@ -148,57 +148,69 @@ for epoch in data['observations']:
     #print time
     #print obs_time
     #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
+    sat_lst = []
     cnt = 0
+    # get navigation satellite and epoch data
+    # jumping over 8 lines
     for i in range(i, len(nav_file),8):
         line = nav_file[i]
+
+        #split up the line to get epoch data
         y = int(line[3:6])
         m = int(line[6:9])
         d = int(line[9:11])
         hh = int(line[11:14])
         mm = int(line[14:17])
         ss = float(line[17:22])
-        #print y,m,d,hh,mm,ss
-        #print line[3:22]
+
+        #convert Gregorian date to Julian Date
         nav_time = GDtoJD(d,m,y,hh,mm,ss)
-        #print 'OBS TIME', obs_time
-        #print 'NAV TIME', nav_time
+        #calculate time difference
         delta_time = abs(obs_time-nav_time)
 
+        #one hour in Julian Date
         hour = 1/24.0
-        
+
+        #find appropriate navigation epoch
+        #if the time difference is less than one hour...
         if delta_time < hour:
-            print cnt
             nav_sat = int(line[:2])
             print 'NAV SAT', nav_sat
+            #iterate over the satellite names of the obervation epoch
             for k in epoch['satellite_info']:
-                #print k
-                if k[0:1] == 'G' and int(k[1:]) == nav_sat:
-                    #print 'nav sat', nav_sat
+                # it must be a galileo satellite (G)
+                # the number of the Galileo satellite and navigation satellite must be equal
+                # there are cases that satellite x can appear more than once (for ..59.44 and ..00.00)
+                # if that is the case we use the ..59.44 (more accurate??)
+                if k[0:1] == 'G' and int(k[1:]) == nav_sat and nav_sat not in sat_lst: 
+                    sat_lst.append(nav_sat)
+                    print sat_lst
+                    epoch['satellite_info'][k]['params'] = {}
+
                     params_lst = []
-                    for idx in range(22,len(line)-1,19):
-                        params_lst.append(line[idx:idx+19])
-                    #print len(params_lst)
+                    for j in range(i,i+8):
+                        line = nav_file[j]
+                        for idx in range(3,len(line)-1,19):
+                            if 'D' in line[idx:idx+19]:
+                                params_lst.append(line[idx:idx+19].replace('D','e'))
+                            else:
+                                params_lst.append(line[idx:idx+19])
+                    # remove first item in list. We only want the orbital parameters
+                    params_lst.pop(0)
+                    for idx,char in enumerate('abcdefghijklmnopqrstuvwxyzABCDE'):
                         
-                    #for param_line in range(i,i+8):
-                        
-                    #params = line+
-                    epoch['satellite_info'][k]['params'] = line
-            print 'next nav obs'
-            cnt += 1
-            #print 'NAV SAT NR', nav_sat
-            #if... 
-            #epoch['observation
-            #print 'yes'
-            #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
-            #print line[3:22]
-            #print delta_time
-            #print
+                        epoch['satellite_info'][k]['params'][char] = params_lst[idx]
+                    
+                else:
+                    continue
+
+
         #print i
     break
     #print delta_time
 ##    print nav_file[i]
 
-#print data['observations'][0]['satellite_info']
+print data['observations'][0]['satellite_info']['G02']
 
-for k in data['observations'][0]['satellite_info']:
-    print k
+#for k in data['observations'][0]['satellite_info']['G02']:
+    #print k
