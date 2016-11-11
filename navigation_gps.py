@@ -208,7 +208,7 @@ for epoch in data['observations']:
         #print i
     break
     #print delta_time
-##    print nav_file[i]
+
 
 print data['observations'][0]['satellite_info']['G02']
 
