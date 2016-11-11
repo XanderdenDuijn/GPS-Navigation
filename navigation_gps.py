@@ -1,5 +1,6 @@
 import math
 import numpy
+from conversions import *
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -14,6 +15,7 @@ obs_input.close()
 ##########################
 
 header = []
+obs_types = []
 i = 0 # i can be seen as the line number
 for i,line in enumerate(obs_file):
     if 'APPROX POSITION XYZ' in line:
@@ -21,19 +23,17 @@ for i,line in enumerate(obs_file):
     elif 'ANTENNA: DELTA H/E/N' in line:
         header.append(line)
     elif '# / TYPES OF OBSERV' in line:
-        header.append(line)
+        # iterate over line with steps of 6 chars, starting at 6
+        # 9 iterations = nr of possible observation types in 1 line
+        for idx in range(6,60,6):  
+            obs_types.append(line[idx:idx+6].strip())
     elif 'TIME OF FIRST OBS' in line:
         header.append(line)
     elif 'END OF HEADER' in line:
         break   
 
 obs_nr = int(header[2][:6].strip()) #number of different observation types
-# will is use the next line if obs_nr > 8 or 9???
-obs_types = []
-# iterate over line with steps of 6 chars
-# 9 iterations = nr of possible observation types in 1 line
-for idx in range(6,59,6):
-    obs_types.append(header[2][idx:idx+6].strip())
+header.insert(2,obs_types)
 
 ################################
 ### READING THE OBSERVATIONS ###
@@ -77,13 +77,13 @@ while i < len(obs_file):
     dic = {}
     ### FILL THE DICTIONARY
     dic['epoch'] = epoch_nr
-    dic['year'] = epoch[0]
-    dic['month'] = epoch[1]
-    dic['day'] = epoch[2]
-    dic['hour'] = epoch[3]
-    dic['min'] = epoch[4]
-    dic['sec'] = epoch[5]
-    dic['flag'] = flag
+    dic['year'] = int(epoch[0])
+    dic['month'] = int(epoch[1])
+    dic['day'] = int(epoch[2])
+    dic['hour'] = int(epoch[3])
+    dic['min'] = int(epoch[4])
+    dic['sec'] = float(epoch[5])
+    dic['flag'] = int(flag)
     dic['satellite_info'] = {}
     for sat_name in sat_names:
         dic['satellite_info'][sat_name] = {}
@@ -95,7 +95,7 @@ while i < len(obs_file):
     for obs_idx,j in enumerate(range(i,i+nr_sats)):
         cur_line = obs_file[j][:-1]
         for obstype_idx, obs_val in enumerate(range(0,len(cur_line[:-1]),16)):
-            dic['satellite_info'][sat_names[obs_idx]][obs_types[obstype_idx]] = cur_line[obs_val:obs_val+16].strip()   
+            dic['satellite_info'][sat_names[obs_idx]][obs_types[obstype_idx]] = cur_line[obs_val:obs_val+14].strip()  
 
     data['observations'].append(dic) #append the observation data to the dict
     epoch_nr += 1
@@ -115,6 +115,7 @@ nav_input = open('brdc0590.11n','r')
 nav_file = nav_input.readlines()
 nav_input.close()
 
+
 nav_header = []
 i = 0 # i can be seen as the line number
 for i,line in enumerate(nav_file):
@@ -132,19 +133,8 @@ for i,line in enumerate(nav_file):
 
 i +=1 # got to next line
 
-def GDtoJD(d,m,y,hh,mm,ss):
-    #representing time as a real number
-    hour = hh+mm/60.0+ss/3600.0
-
-    if m <= 2:
-        y = y-1
-        m = m+12
-    JD = int(365.25*y)+int(30.6001*(m+1))+d+hour/24.0+1720981.5
-    return JD
-
-
 for epoch in data['observations']:
-    obs_time = GDtoJD(int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec']))
+    obs_time = GDtoJD(epoch['day'], epoch['month'], epoch['year'], epoch['hour'], epoch['min'], epoch['sec'])
     #print time
     #print obs_time
     #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
@@ -170,7 +160,8 @@ for epoch in data['observations']:
 
         #one hour in Julian Date
         hour = 1/24.0
-
+        minute = 1/(24*3600.0)
+        
         #find appropriate navigation epoch
         #if the time difference is less than one hour...
         if delta_time < hour:
@@ -178,8 +169,8 @@ for epoch in data['observations']:
             print 'NAV SAT', nav_sat
             #iterate over the satellite names of the obervation epoch
             for k in epoch['satellite_info']:
-                # it must be a galileo satellite (G)
-                # the number of the Galileo satellite and navigation satellite must be equal
+                # it must be a GPS satellite (G)
+                # the number of the GPS satellite and navigation satellite must be equal
                 # there are cases that satellite x can appear more than once (for ..59.44 and ..00.00)
                 # if that is the case we use the ..59.44 (more accurate??)
                 if k[0:1] == 'G' and int(k[1:]) == nav_sat and nav_sat not in sat_lst: 
@@ -199,7 +190,7 @@ for epoch in data['observations']:
                     params_lst.pop(0)
                     for idx,char in enumerate('abcdefghijklmnopqrstuvwxyzABCDE'):
                         
-                        epoch['satellite_info'][k]['params'][char] = params_lst[idx]
+                        epoch['satellite_info'][k]['params'][char] = params_lst[idx].strip()
                     
                 else:
                     continue
@@ -210,7 +201,28 @@ for epoch in data['observations']:
     #print delta_time
 
 
-print data['observations'][0]['satellite_info']['G02']
+for sat_name in data['observations'][0]['satellite_info']:
+    if sat_name[0] == 'R':
+        continue
+    else:
+        print sat_name
+        y = data['observations'][0]['year'] +2000
+        m = data['observations'][0]['month']
+        d = data['observations'][0]['day']
+        hh = data['observations'][0]['hour']
+        mm = data['observations'][0]['min']
+        ss = data['observations'][0]['sec']
+        JD = GDtoJD(d,m,y,hh,mm,ss)
+        Trec = JDtoGPS(2455621.07766)
+        c = 299792458
+        Toe = float(data['observations'][0]['satellite_info'][sat_name]['params']['l'])
+        p2 = float(data['observations'][0]['satellite_info'][sat_name]['P2'])        
+        Temis = (Trec - (p2/c))-Toe
+        print 'Temis: ', Temis
+        
+        break
+
+#print data['observations'][0]['satellite_info']['G02']
 
 #for k in data['observations'][0]['satellite_info']['G02']:
     #print k
