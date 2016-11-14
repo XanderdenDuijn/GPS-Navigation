@@ -16,7 +16,7 @@ obs_input.close()
 
 header = []
 obs_types = []
-i = 0 # i can be seen as the line number
+i = 0 # i = line number
 for i,line in enumerate(obs_file):
     if 'APPROX POSITION XYZ' in line:
         header.append(line)
@@ -95,17 +95,12 @@ while i < len(obs_file):
     for obs_idx,j in enumerate(range(i,i+nr_sats)):
         cur_line = obs_file[j][:-1]
         for obstype_idx, obs_val in enumerate(range(0,len(cur_line[:-1]),16)):
-            dic['satellite_info'][sat_names[obs_idx]][obs_types[obstype_idx]] = cur_line[obs_val:obs_val+14].strip()  
+            dic['satellite_info'][sat_names[obs_idx]][obs_types[obstype_idx]] = cur_line[obs_val:obs_val+14].strip()     
 
     data['observations'].append(dic) #append the observation data to the dict
     epoch_nr += 1
     i += nr_sats
-    #print 'NEXT EPOCH'
-    
-# TESTING
-##print data['observations'][0]['satellite_info']['G02']['P2']
-##for sat in data['observations'][0]['satellite_info']:
-##    print sat,data['observations'][0]['satellite_info'][sat]['P2']
+
 
 ####################################
 ### READING THE NAVIGATION FILE ###
@@ -114,7 +109,6 @@ while i < len(obs_file):
 nav_input = open('brdc0590.11n','r')
 nav_file = nav_input.readlines()
 nav_input.close()
-
 
 nav_header = []
 i = 0 # i can be seen as the line number
@@ -135,11 +129,11 @@ i +=1 # got to next line
 
 for epoch in data['observations']:
     obs_time = GDtoJD(epoch['day'], epoch['month'], epoch['year'], epoch['hour'], epoch['min'], epoch['sec'])
-    #print time
-    #print obs_time
-    #print int(epoch['day']), int(epoch['month']), int(epoch['year']), int(epoch['hour']), int(epoch['min']), float(epoch['sec'])
-    sat_lst = []
-    cnt = 0
+
+    # minimum time interval in Julian Date
+    hour = 1/24.0
+    minute = 1/(24*3600.0)
+    lst = []
     # get navigation satellite and epoch data
     # jumping over 8 lines
     for i in range(i, len(nav_file),8):
@@ -158,47 +152,48 @@ for epoch in data['observations']:
         #calculate time difference
         delta_time = abs(obs_time-nav_time)
 
-        #one hour in Julian Date
-        hour = 1/24.0
-        minute = 1/(24*3600.0)
-        
-        #find appropriate navigation epoch
-        #if the time difference is less than one hour...
-        if delta_time < hour:
-            nav_sat = int(line[:2])
-            print 'NAV SAT', nav_sat
-            #iterate over the satellite names of the obervation epoch
-            for k in epoch['satellite_info']:
-                # it must be a GPS satellite (G)
-                # the number of the GPS satellite and navigation satellite must be equal
-                # there are cases that satellite x can appear more than once (for ..59.44 and ..00.00)
-                # if that is the case we use the ..59.44 (more accurate??)
-                if k[0:1] == 'G' and int(k[1:]) == nav_sat and nav_sat not in sat_lst: 
-                    sat_lst.append(nav_sat)
-                    print sat_lst
-                    epoch['satellite_info'][k]['params'] = {}
+        #make first selection
+        if delta_time < hour + minute:
+            item = delta_time, i
+            lst.append(item)
 
-                    params_lst = []
-                    for j in range(i,i+8):
-                        line = nav_file[j]
-                        for idx in range(3,len(line)-1,19):
-                            if 'D' in line[idx:idx+19]:
-                                params_lst.append(line[idx:idx+19].replace('D','e'))
-                            else:
-                                params_lst.append(line[idx:idx+19])
-                    # remove first item in list. We only want the orbital parameters
-                    params_lst.pop(0)
-                    for idx,char in enumerate('abcdefghijklmnopqrstuvwxyzABCDE'):
-                        
-                        epoch['satellite_info'][k]['params'][char] = params_lst[idx].strip()
-                    
-                else:
-                    continue
-
-
-        #print i
-    break
-    #print delta_time
+    # remove the duplicate satellites with a smaller delta_time
+    for delta_time1, i1 in lst:
+        line1 = nav_file[i1]
+        nav_sat1 = int(line1[:2])
+        for delta_time2, i2 in lst:
+            line2 = nav_file[i2]
+            nav_sat2 = int(line2[:2])
+            if nav_sat1 == nav_sat2 and delta_time2 < delta_time1:
+                item = delta_time1,i1      
+                lst.remove(item)
+            
+    for delta_time,i in lst:
+        line = nav_file[i]
+        nav_sat = int(line[:2])
+        print 'NAV SAT', nav_sat
+        #iterate over the satellite names of the obervation epoch
+        for k in epoch['satellite_info']:
+            # it must be a GPS satellite (G)
+            # the number of the GPS satellite and navigation satellite must be equal
+            # there are cases that satellite x can appear more than once (for ..59.44 and ..00.00)
+            if k[0:1] == 'G' and int(k[1:]) == nav_sat:
+                epoch['satellite_info'][k]['params'] = {}
+                params_lst = []
+                for j in range(i,i+8):
+                    line = nav_file[j]
+                    for idx in range(3,len(line)-1,19):
+                        if 'D' in line[idx:idx+19]:
+                            params_lst.append(line[idx:idx+19].replace('D','e'))
+                        else:
+                            params_lst.append(line[idx:idx+19])
+                # remove first item in list. We only want the orbital parameters
+                params_lst.pop(0)
+                for idx,char in enumerate('abcdefghijklmnopqrstuvwxyzABCDE'):   
+                    epoch['satellite_info'][k]['params'][char] = float(params_lst[idx].strip()) 
+            else:
+                continue
+    break #this break is here for testing purposes. Only the first epoch will be used.
 
 
 for sat_name in data['observations'][0]['satellite_info']:
@@ -215,7 +210,7 @@ for sat_name in data['observations'][0]['satellite_info']:
         JD = GDtoJD(d,m,y,hh,mm,ss)
         Trec = JDtoGPS(2455621.07766)
         c = 299792458
-        Toe = float(data['observations'][0]['satellite_info'][sat_name]['params']['l'])
+        Toe = data['observations'][0]['satellite_info'][sat_name]['params']['l']
         p2 = float(data['observations'][0]['satellite_info'][sat_name]['P2'])        
         Temis = (Trec - (p2/c))-Toe
         print 'Temis: ', Temis
