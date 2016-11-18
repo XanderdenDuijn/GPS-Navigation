@@ -121,9 +121,6 @@ for i,line in enumerate(nav_file):
         nav_header.append(line)
     elif 'END OF HEADER' in line:
         break
-#print nav_header
-
-# reading first line of navigation file is not possible to check whether it is a GPS navigation file
 
 i +=1 # got to next line
 
@@ -176,7 +173,6 @@ for epoch in data['observations']:
         for k in epoch['satellite_info']:
             # it must be a GPS satellite (G)
             # the number of the GPS satellite and navigation satellite must be equal
-            # there are cases that satellite x can appear more than once (for ..59.44 and ..00.00)
             if k[0:1] == 'G' and int(k[1:]) == nav_sat:
                 epoch['satellite_info'][k]['params'] = {}
                 params_lst = []
@@ -189,17 +185,46 @@ for epoch in data['observations']:
                             params_lst.append(line[idx:idx+19])
                 # remove first item in list. We only want the orbital parameters
                 params_lst.pop(0)
-                for idx,char in enumerate('abcdefghijklmnopqrstuvwxyzABCDE'):   
-                    epoch['satellite_info'][k]['params'][char] = float(params_lst[idx].strip()) 
+
+                #populating the dict with the orbital parameters
+                params = epoch['satellite_info'][k]['params']
+        
+                params['SV Clock Bias'] = float(params_lst[0].strip())
+                params['SV Clock Drift'] = float(params_lst[1].strip())
+                params['SV Clock Drift Rate'] = float(params_lst[2].strip())
+                params['IODE'] = float(params_lst[3].strip())
+                params['Crs'] = float(params_lst[4].strip())
+                params['Delta n'] = float(params_lst[5].strip())
+                params['Mo'] = float(params_lst[6].strip())
+                params['Cuc'] = float(params_lst[7].strip())
+                params['Eccentricity'] = float(params_lst[8].strip())
+                params['Cus'] = float(params_lst[9].strip())
+                params['Sqrt(a)'] = float(params_lst[10].strip())
+                params['TOE'] = float(params_lst[11].strip())
+                params['Cic'] = float(params_lst[12].strip())
+                params['OMEGA'] = float(params_lst[13].strip())
+                params['CIS'] = float(params_lst[14].strip())
+                params['Io'] = float(params_lst[15].strip())
+                params['Crc'] = float(params_lst[16].strip())
+                params['Omega'] = float(params_lst[17].strip())
+                params['OMEGA DOT'] = float(params_lst[18].strip())
+                params['IDOT'] = float(params_lst[19].strip())
+                params['L2 Codes Channel'] = float(params_lst[20].strip())
+                params['GPS Week'] = float(params_lst[21].strip())
+                params['L2 P Data Flag'] = float(params_lst[22].strip())
+                params['SV Accuracy'] = float(params_lst[23].strip())
+                params['SV Health'] = float(params_lst[24].strip())
+                params['TGD'] = float(params_lst[25].strip())
+                params['IODC'] = float(params_lst[26].strip())
+                params['Transmission Time'] = float(params_lst[27].strip())
+                params['Fit Interval'] = float(params_lst[28].strip())
             else:
                 continue
     break #this break is here for testing purposes. Only the first epoch will be used.
 
 
 for sat_name in data['observations'][0]['satellite_info']:
-    if sat_name[0] == 'R':
-        continue
-    else:
+    if sat_name[0] == 'G':
         print sat_name
         y = data['observations'][0]['year'] +2000
         m = data['observations'][0]['month']
@@ -207,15 +232,110 @@ for sat_name in data['observations'][0]['satellite_info']:
         hh = data['observations'][0]['hour']
         mm = data['observations'][0]['min']
         ss = data['observations'][0]['sec']
+        print hh, mm, ss
         JD = GDtoJD(d,m,y,hh,mm,ss)
-        Trec = JDtoGPS(2455621.07766)
+        print JD
+        Trec = JDtoGPS(JD)
+        Trec = 135110.000007
+        #sec_of_week = 135110.000007
+        print 'Trec: ', Trec
         c = 299792458
-        Toe = data['observations'][0]['satellite_info'][sat_name]['params']['l']
-        p2 = float(data['observations'][0]['satellite_info'][sat_name]['P2'])        
-        Temis = (Trec - (p2/c))-Toe
-        print 'Temis: ', Temis
+        Toe = data['observations'][0]['satellite_info'][sat_name]['params']['TOE']
+        print 'TOE: ', Toe
+        p2 = float(data['observations'][0]['satellite_info'][sat_name]['P2'])
+        print 'P2: ', p2
+        #TEMIS should be 135109.927325
+        print p2/c
+        Temis1 = (Trec - (p2/c))-Toe
+        print 'TEMIS BEFORE: ', Temis1
+        if Temis1 > 302400:
+            Temis1 = Temis1 - 604800
+        else:
+            Temis1 = Temis1 + 604800
+        print 'Temis1', Temis1
+        a0 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Bias']
+        a1 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Drift']
+        a2 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Drift Rate']
+        Tcorr1 = a0 + a1*Temis1 + a2*(Temis1**2)
+        print Tcorr1
+
+        Temis2 = (Trec - (p2/c) - Tcorr1) - Toe
+        print Temis2
+        if Temis2 > 302400:
+            Temis2 = Temis2 - 604800
+        else:
+            Temis2 = Temis2 + 604800
+        print Temis2
+
+        Tcorr2 = a0 + a1*Temis2 + a2*(Temis2**2)
+
+        Temis = (Trec - (p2/c) - Tcorr2) - Toe
+        if Temis > 302400:
+            Temis = Temis - 604800
+        else:
+            Temis = Temis + 604800
+        print 'Final emission time', Temis
+        a = data['observations'][0]['satellite_info'][sat_name]['params']['Sqrt(a)']
+        a = a**2
+
+        # compute mean notion
+        delta_n = data['observations'][0]['satellite_info'][sat_name]['params']['Delta n']
+        n = math.sqrt(3.986005e+14/a**2) + delta_n
+
+        # compute mean anomaly
+        Mo = data['observations'][0]['satellite_info'][sat_name]['params']['Mo']
+        M = Mo + n * Temis
+
+        # eccentric anomaly
+        e = data['observations'][0]['satellite_info'][sat_name]['params']['Eccentricity']
+        # first iteration
+        E = M + e * math.sin(M)
+        for i in range(10):
+            E = M + e * math.sin(E)
+            print E
+
+        #calculate true anomaly
+
+        v = math.atan((math.sqrt(1-e**2)*math.sin(E))/(math.cos(E)-e))
+    
+        #argument of latitude
+        omega = data['observations'][0]['satellite_info'][sat_name]['params']['Omega']
+        arglat = v + omega
+
+        #orbital correction terms
+        Cus = data['observations'][0]['satellite_info'][sat_name]['params']['Cus']
+        Cuc = data['observations'][0]['satellite_info'][sat_name]['params']['Cuc']
+        delta_u = Cus * sin(2*arglat) + Cuc * cos(2*arglat)
+        Crs = data['observations'][0]['satellite_info'][sat_name]['params']['Crs']
+        Crc = data['observations'][0]['satellite_info'][sat_name]['params']['Crc']
+        delta_r = Crs * sin(2*arglat) + Crc * cos(2*arglat)
+        Cis = data['observations'][0]['satellite_info'][sat_name]['params']['Cis']
+        Cic = data['observations'][0]['satellite_info'][sat_name]['params']['Cic']
+        delta_i = Cis * sin(2*arglat) + Cic * cos(2*arglat)
+
+        #argument of latitude, radius and inclination:
+        arglat = arglat + delta_u
+        r = a*(1-e*cos(E)) + delta_r
+        Io = data['observations'][0]['satellite_info'][sat_name]['params']['Io']
+        IDOT = data['observations'][0]['satellite_info'][sat_name]['params']['IDOT']
+        i = Io + delta_i + IDOT * Temis
+
+        #position of orbital plane
+        xop = r * cos(arglat)
+        yop = r * sin(arglat)
+
+        #correct longitude of ascending node
+        rotation = 7.2921151467e-5
+        OMEGA = data['observations'][0]['satellite_info'][sat_name]['params']['OMEGA']
+        OMEGA_DOT = data['observations'][0]['satellite_info'][sat_name]['params']['OMEGA DOT']
+        lon_asc = OMEGA + (OMEGA_DOT - rotation) * Temis - OMEGA_DOT * Toe
+
+        # final satellite coordinates
         
+
         break
+    else:
+        continue
 
 #print data['observations'][0]['satellite_info']['G02']
 
