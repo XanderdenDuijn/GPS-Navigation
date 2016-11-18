@@ -1,5 +1,6 @@
+from pyproj import Proj, transform
 import math
-import numpy
+import numpy as np
 from conversions import *
 
 ####################################
@@ -232,11 +233,10 @@ for sat_name in data['observations'][0]['satellite_info']:
         hh = data['observations'][0]['hour']
         mm = data['observations'][0]['min']
         ss = data['observations'][0]['sec']
-        print hh, mm, ss
+        #print hh, mm, ss
         JD = GDtoJD(d,m,y,hh,mm,ss)
         print JD
         Trec = JDtoGPS(JD)
-        Trec = 135110.000007
         #sec_of_week = 135110.000007
         print 'Trec: ', Trec
         c = 299792458
@@ -245,34 +245,37 @@ for sat_name in data['observations'][0]['satellite_info']:
         p2 = float(data['observations'][0]['satellite_info'][sat_name]['P2'])
         print 'P2: ', p2
         #TEMIS should be 135109.927325
-        print p2/c
+        #print p2/c
         Temis1 = (Trec - (p2/c))-Toe
         print 'TEMIS BEFORE: ', Temis1
         if Temis1 > 302400:
             Temis1 = Temis1 - 604800
-        else:
+        elif Temis1 < -302400:
             Temis1 = Temis1 + 604800
-        print 'Temis1', Temis1
+        print 'TEMIS1 AFTER', Temis1
+        
         a0 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Bias']
         a1 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Drift']
         a2 = data['observations'][0]['satellite_info'][sat_name]['params']['SV Clock Drift Rate']
         Tcorr1 = a0 + a1*Temis1 + a2*(Temis1**2)
         print Tcorr1
+        
 
         Temis2 = (Trec - (p2/c) - Tcorr1) - Toe
         print Temis2
         if Temis2 > 302400:
             Temis2 = Temis2 - 604800
-        else:
+        elif Temis2 < -302400:
             Temis2 = Temis2 + 604800
         print Temis2
-
+        
         Tcorr2 = a0 + a1*Temis2 + a2*(Temis2**2)
+        print Tcorr2
 
         Temis = (Trec - (p2/c) - Tcorr2) - Toe
         if Temis > 302400:
             Temis = Temis - 604800
-        else:
+        elif Temis < -302400:
             Temis = Temis + 604800
         print 'Final emission time', Temis
         a = data['observations'][0]['satellite_info'][sat_name]['params']['Sqrt(a)']
@@ -280,60 +283,101 @@ for sat_name in data['observations'][0]['satellite_info']:
 
         # compute mean notion
         delta_n = data['observations'][0]['satellite_info'][sat_name]['params']['Delta n']
-        n = math.sqrt(3.986005e+14/a**2) + delta_n
+        n = math.sqrt(3.986005e+14/a**3) + delta_n
+        print 'MEAN MOTION: ', n
 
         # compute mean anomaly
         Mo = data['observations'][0]['satellite_info'][sat_name]['params']['Mo']
         M = Mo + n * Temis
+        print 'MEAN ANOMALY: ', M
 
         # eccentric anomaly
         e = data['observations'][0]['satellite_info'][sat_name]['params']['Eccentricity']
         # first iteration
         E = M + e * math.sin(M)
+        print E
+        print
         for i in range(10):
             E = M + e * math.sin(E)
             print E
-
         #calculate true anomaly
 
         v = math.atan((math.sqrt(1-e**2)*math.sin(E))/(math.cos(E)-e))
+        print v
     
         #argument of latitude
         omega = data['observations'][0]['satellite_info'][sat_name]['params']['Omega']
         arglat = v + omega
+        print arglat
 
         #orbital correction terms
         Cus = data['observations'][0]['satellite_info'][sat_name]['params']['Cus']
         Cuc = data['observations'][0]['satellite_info'][sat_name]['params']['Cuc']
-        delta_u = Cus * sin(2*arglat) + Cuc * cos(2*arglat)
+        delta_u = Cus * math.sin(2*arglat) + Cuc * math.cos(2*arglat)
         Crs = data['observations'][0]['satellite_info'][sat_name]['params']['Crs']
         Crc = data['observations'][0]['satellite_info'][sat_name]['params']['Crc']
-        delta_r = Crs * sin(2*arglat) + Crc * cos(2*arglat)
-        Cis = data['observations'][0]['satellite_info'][sat_name]['params']['Cis']
+        delta_r = Crs * math.sin(2*arglat) + Crc * math.cos(2*arglat)
+        Cis = data['observations'][0]['satellite_info'][sat_name]['params']['CIS']
         Cic = data['observations'][0]['satellite_info'][sat_name]['params']['Cic']
-        delta_i = Cis * sin(2*arglat) + Cic * cos(2*arglat)
+        delta_i = Cis * math.sin(2*arglat) + Cic * math.cos(2*arglat)
+        print delta_u, delta_r, delta_i
 
         #argument of latitude, radius and inclination:
         arglat = arglat + delta_u
-        r = a*(1-e*cos(E)) + delta_r
+        print arglat
+        r = a*(1-e*math.cos(E)) + delta_r
+        print r
         Io = data['observations'][0]['satellite_info'][sat_name]['params']['Io']
         IDOT = data['observations'][0]['satellite_info'][sat_name]['params']['IDOT']
         i = Io + delta_i + IDOT * Temis
+        print i
 
         #position of orbital plane
-        xop = r * cos(arglat)
-        yop = r * sin(arglat)
+        xop = r * math.cos(arglat)
+        print xop
+        yop = r * math.sin(arglat)
+        print yop
 
         #correct longitude of ascending node
         rotation = 7.2921151467e-5
         OMEGA = data['observations'][0]['satellite_info'][sat_name]['params']['OMEGA']
         OMEGA_DOT = data['observations'][0]['satellite_info'][sat_name]['params']['OMEGA DOT']
-        lon_asc = OMEGA + (OMEGA_DOT - rotation) * Temis - OMEGA_DOT * Toe
+        lon_asc = OMEGA + (OMEGA_DOT - rotation) * Temis - rotation * Toe
+        print lon_asc
 
         # final satellite coordinates
-        
+        sat_x = xop * math.cos(lon_asc)-yop*math.cos(i)*math.sin(lon_asc)
+        sat_y = xop * math.sin(lon_asc)+yop*math.cos(i)*math.cos(lon_asc)
+        sat_z = yop*math.sin(i)
+        print sat_x
+        print sat_y
+        print sat_z
 
-        break
+        dic['satellite_info'][sat_name]['X'] = float(sat_x)
+        dic['satellite_info'][sat_name]['X'] = float(sat_y)
+        dic['satellite_info'][sat_name]['X'] = float(sat_z)
+
+        if data['observations'][0]['flag'] == 0:
+            
+            traveltime = p2/c
+            
+            R3 = np.array([[math.cos(traveltime*rotation),math.sin(traveltime*rotation),0],
+                          [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
+                          [0,0,1]])
+            sat_x_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[0]
+            print float(sat_x_rot)
+            sat_y_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[1]
+            print float(sat_y_rot)
+            sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
+            print float(sat_z_rot)
+
+            inProj = Proj(init='epsg:3042')
+            outProj = Proj(init='epsg:4326')
+            print transform(inProj,outProj,sat_x_rot,sat_y_rot)
+            break
+        else:
+            continue
+            
     else:
         continue
 
