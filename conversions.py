@@ -14,7 +14,7 @@ def JDtoGPS(JD):
     week = int((JD-2444244.5)/7)
     day_week = int(JD+0.5+1)%7
     decimal = JD - int(JD)
-    hour = int(JD)
+    hour = (JD + 0.5 - int(JD + 0.5))*24
     #seconds + seconds in days
-    secs = (decimal*(hour/24)+day_week)*86400 + day_week * (3600*24) + week *(3600*24*7)
+    secs = ((hour/24)%1+day_week)*86400 
     return secs
