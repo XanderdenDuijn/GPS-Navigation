@@ -2,6 +2,7 @@ from pyproj import Proj, transform
 import math
 import numpy as np
 from conversions import *
+import utm
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -357,6 +358,14 @@ for sat_name in data['observations'][0]['satellite_info']:
         dic['satellite_info'][sat_name]['X'] = float(sat_y)
         dic['satellite_info'][sat_name]['X'] = float(sat_z)
 
+        ### WHY IS THIS NOT WORKING?? ###
+        
+        #final corrections
+        trel = -2 * (math.sqrt(3.986005e+14*a)/c) * e * math.sin(E)
+        #1.59123485071e-08
+        #0.000323181406797
+        print 'TREL', trel
+
         if data['observations'][0]['flag'] == 0:
             
             traveltime = p2/c
@@ -371,9 +380,15 @@ for sat_name in data['observations'][0]['satellite_info']:
             sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
             print float(sat_z_rot)
 
-            inProj = Proj(init='epsg:3042')
-            outProj = Proj(init='epsg:4326')
-            print transform(inProj,outProj,sat_x_rot,sat_y_rot)
+            ecef = Proj(proj='geocent', ellps='WGS84', datum='WGS84')
+            lla = Proj(proj='latlong', ellps='WGS84', datum='WGS84')
+            sat_lon, sat_lat, sat_alt = transform(ecef,lla,sat_x_rot,sat_y_rot, sat_z_rot)
+            print sat_lon, sat_lat, sat_alt
+            #x,y = transform(inProj,outProj,sat_lon,sat_lat)
+            #print x,y
+
+            Nutm, Eutm, zone_nr, zone_letter,  = utm.from_latlon(54.9878505, 52.22551822)
+            print Nutm, Eutm
             break
         else:
             continue
