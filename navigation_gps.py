@@ -116,9 +116,35 @@ nav_header = []
 i = 0 # i can be seen as the line number
 for i,line in enumerate(nav_file):
     if 'ION ALPHA' in line:
-        nav_header.append(line)
+        temp_ion_alpha = []
+        temp_ion_alpha.append(line[2:14])
+        temp_ion_alpha.append(line[14:26])
+        temp_ion_alpha.append(line[26:38])
+        temp_ion_alpha.append(line[38:50])
+
+        ion_alpha = []
+        for value in temp_ion_alpha:
+            if 'D' in value:
+                value = value.replace('D','e')
+                print value
+            value = float(value)
+            ion_alpha.append(value)
+        nav_header.append(ion_alpha)
     elif 'ION BETA' in line:
-        nav_header.append(line)
+        temp_ion_beta = []
+        temp_ion_beta.append(line[2:14])
+        temp_ion_beta.append(line[14:26])
+        temp_ion_beta.append(line[26:38])
+        temp_ion_beta.append(line[38:50])
+
+        ion_beta = []
+        for value in temp_ion_beta:
+            if 'D' in value:
+                value = value.replace('D','e')
+                print value
+            value = float(value)
+            ion_beta.append(value)       
+        nav_header.append(ion_beta)
     elif 'LEAP SECONDS' in line:
         nav_header.append(line)
     elif 'END OF HEADER' in line:
@@ -237,8 +263,8 @@ for sat_name in data['observations'][0]['satellite_info']:
         #print hh, mm, ss
         JD = GDtoJD(d,m,y,hh,mm,ss)
         print JD
-        Trec = JDtoGPS(JD)
-        #sec_of_week = 135110.000007
+        Trec = JDtosecofweek(JD)
+        dic['satellite_info'][sat_name]['sec_of_week'] = Trec
         print 'Trec: ', Trec
         c = 299792458
         Toe = data['observations'][0]['satellite_info'][sat_name]['params']['TOE']
@@ -271,7 +297,7 @@ for sat_name in data['observations'][0]['satellite_info']:
         print Temis2
         
         Tcorr2 = a0 + a1*Temis2 + a2*(Temis2**2)
-        print Tcorr2
+        print 'TCORR2', Tcorr2
 
         Temis = (Trec - (p2/c) - Tcorr2) - Toe
         if Temis > 302400:
@@ -357,14 +383,17 @@ for sat_name in data['observations'][0]['satellite_info']:
         dic['satellite_info'][sat_name]['X'] = float(sat_x)
         dic['satellite_info'][sat_name]['X'] = float(sat_y)
         dic['satellite_info'][sat_name]['X'] = float(sat_z)
-
-        ### WHY IS THIS NOT WORKING?? ###
         
         #final corrections
-        trel = -2 * (math.sqrt(3.986005e+14*a)/c) * e * math.sin(E)
-        #1.59123485071e-08
-        #0.000323181406797
+        ### SENOR EL DOCUMENTO NO ES CORRECTO ###
+        trel = -2 * (math.sqrt(3.986005e+14*a)/c**2) * e * math.sin(E)
         print 'TREL', trel
+        # total group delay/satellite instrumental bias
+        TGD_L1 = data['observations'][0]['satellite_info'][sat_name]['params']['TGD']
+        TGD_L2 = 1.65*TGD_L1
+        print TGD_L2
+        Tcorr = Tcorr2 + trel - TGD_L2
+        print 'Tcorr', Tcorr
 
         if data['observations'][0]['flag'] == 0:
             
@@ -384,13 +413,107 @@ for sat_name in data['observations'][0]['satellite_info']:
             lla = Proj(proj='latlong', ellps='WGS84', datum='WGS84')
             sat_lon, sat_lat, sat_alt = transform(ecef,lla,sat_x_rot,sat_y_rot, sat_z_rot)
             print sat_lon, sat_lat, sat_alt
-            #x,y = transform(inProj,outProj,sat_lon,sat_lat)
-            #print x,y
 
             Nutm, Eutm, zone_nr, zone_letter,  = utm.from_latlon(54.9878505, 52.22551822)
             print Nutm, Eutm
+
+            ### WE ALSO NEED THE ELEVATION AND AZIMUTH ###
+            
+            if elevation > 10:
+                z = 90 - elevation
+                h_ECEF = sat_z_rot #elipsoidal height
+                p = 1013.25*(1-0.000065*h_ECEF)**5.225
+                T = 291.15-0.0065*h_ECEF
+                H = 50*np.exp(-0.0006396*h_ECEF)
+                e = (H*0.01)*np.exp(-37.2465+0.213166*T*(0.000256908*T**2))
+                
+                #find smallest diff with height
+                #find corresponding B(mb)
+                
+                B_dic = {0.0:1.156,
+                         0.5:1.079,
+                         1.0:1.006,
+                         1.5:0.938,
+                         2.0:0.874,
+                         2.5:0.813,
+                         3.0:0.757,
+                         4.0:0.654,
+                         5.0:0.563}
+                B = B_dict[min(B_dic, key=lambda x:abs(x-2.2))]
+                    
+                dtropo = (0.002277/math.cos(z))*(p+(1255/T+0.05)*e-B*(math.tan(z))**2 )
+
+                #ionospheric delay with klobuchar model
+
+                #1 calcualte earth centered angle
+                eca = 0.0137/E+0.11 - 0.022 #semicircles
+
+                #2 compute the latitude of the ionospheric Pierce Point (IPP)
+                # u_lat has to be in degrees!!! and corresponds with the users position
+                # A is azimuth of the satellite in radians
+                ipp_lat = u_lat/180 + eca*math.cos(A)
+                if ipp_lat > 0.416:
+                    ipp_lat = 0.416
+                elif ipp_lat < -0.416:
+                    ipp_lat = -0.416
+
+                #3 compute the longitude of ionospheric Pierce Point (IPP)
+                # u_lat has to be in degrees!!! and corresponds with the users position
+                ipp_lon = u_lon + eca*math.sin(A)/math.cos(ipp_lat)
+
+                #4 find the geomagnetic latitude of the IPP
+                geom_lat = ipp_lat + 0.064*math.cos((ipp_lon-1.617)*math.pi)
+
+                #5 find the local time at the IPP
+                ipp_time = 43200 * ipp_lon + sec_of_week
+                if ipp_time >= 86400:
+                    ipp_time -= 86400
+                elif ipp_time < 0:
+                    ipp_time += 86400
+
+                #6 compute the amplitude of the ionospheric delay in seconds
+                Ai = []
+                for i in range(4):
+                    Ai.append(nav_header[0][i]*geom_lat**i)
+                
+                Ai = sum(Ai)
+                if Ai < 0:
+                    Ai = 0
+
+                #7 compute the period of the ionospheric delay in seconds
+                Pi = []
+                for i in range(4):
+                    Pi.append(nav_header[0][i]*geom_lat**i)
+                
+                Pi = sum(Pi)
+                if Pi < 72000:
+                    Ai = 72000                    
+                #8 compute the phase of the ionospheric delay in radians!!!
+                Xi = 2*math.pi*(ipp_time-50400)/Pi
+
+                #9 compute the slant factor (elevation E in semicircles)
+                F = 1.0 + 16.0*(0.53-E)**3
+
+                #10 compute the ionospheric delay time
+                if Xi < 1.57:
+                    IL1 = 5e-9+Ai*(1-(Xi**2/2)+(Xi**4/24))*F
+                else:
+                    IL1 = 5e-9 *F
+
+                #11 compute the ionospheric time delay for L2 in seconds
+                IL2 = 1.65 * IL1
+
+                #12 transform to meters
+                IL2 = IL2 * c
+
+                
+
+                
+
             break
         else:
+            #it not a GPS Satellite
+            #add 'None' items to dictionary?
             continue
             
     else:
