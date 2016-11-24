@@ -414,7 +414,7 @@ for sat_name in data['observations'][0]['satellite_info']:
             sat_lon, sat_lat, sat_alt = transform(ecef,lla,sat_x_rot,sat_y_rot, sat_z_rot)
             print sat_lon, sat_lat, sat_alt
 
-            Nutm, Eutm, zone_nr, zone_letter,  = utm.from_latlon(54.9878505, 52.22551822)
+            Nutm, Eutm, zone_nr, zone_letter,  = utm.from_latlon(sat_lat, sat_lon)
             print Nutm, Eutm
 
             ### WE ALSO NEED THE ELEVATION AND AZIMUTH ###
