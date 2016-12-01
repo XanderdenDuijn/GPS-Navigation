@@ -432,17 +432,14 @@ for sat_name in data['observations'][0]['satellite_info']:
 
             print approx_lat_rad, approx_lon_rad
         
-            # lets calculate the distance between the approx station point and the sat
+            # lets calculate the distance between the approx station point and the sat (using ECEF coords)
             d = math.sqrt((sat_x-approx_x)**2+(sat_y-approx_y)**2+(sat_z-approx_z)**2)
-            #break
-            #traveltime = p2/c
-            #print traveltime
             
             traveltime = d/c
             print traveltime
             wt = traveltime * rotation
 
-            # from xyz at emission time to xyz at reception time
+            # from xyz of sat at emission time to xyz at reception time
             
             R3 = np.array([[math.cos(traveltime*rotation),math.sin(traveltime*rotation),0],
                           [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
@@ -472,55 +469,22 @@ for sat_name in data['observations'][0]['satellite_info']:
             R31 = np.array([[-math.sin(approx_lat_rad)*math.cos(approx_lon_rad), -sin(approx_lat_rad)*sin(approx_lon_rad),cos(approx_lat_rad)],
                            [-math.sin(approx_lon_rad),math.cos(approx_lon_rad),0],
                            [math.cos(approx_lat_rad)*math.cos(approx_lon_rad), math.sin(approx_lon_rad)*math.cos(approx_lat_rad),math.sin(approx_lat_rad)]])
-
-            #NEh = np.dot(R3,dX)
-            #print NEh
-            print 'NEW', np.dot(R31,dX)
-            break
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             
+            NEh = np.dot(R31,dX) 
             NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
             print NEh
-            El, Az = Elev_Az.El_Az(NEh)
+            El, Az = Elev_Az.El_Az(NEh) #in radians
             print El, Az
-            break
+            El = El * (180.0/math.pi)
+            Az = Az * (180.0/math.pi)
+            print El, Az
 
-            ecef = Proj(proj='geocent', ellps='WGS84', datum='WGS84')
-            lla = Proj(proj='latlong', ellps='WGS84', datum='WGS84')
-##            sat_lon, sat_lat, sat_alt = transform(ecef,lla,sat_x_rot,sat_y_rot, sat_z_rot)
-##            print sat_lon, sat_lat, sat_alt
 
-            # we use our own conversion
-            lat, lon, h = xyztolatlonh(sat_x_rot,sat_y_rot,sat_z_rot)
-            #print lon, lat, h
-            #break
-            Nutm, Eutm, zone_nr, zone_letter,  = utm.from_latlon(lat, lon)
-            print Nutm, Eutm
-            break
-
-            #elevation, az = Elev_az(
-
-            ### WE ALSO NEED THE ELEVATION AND AZIMUTH ###
             
-            if elevation > 10:
-                z = 90 - elevation
+            if El > 10:
+                z = 90 - El
                 h_ECEF = sat_z_rot #elipsoidal height
-                p = 1013.25*(1-0.000065*h_ECEF)**5.225
+                p = 1013.25*(1-0.000065*h_ECEF)**(5.225)
                 T = 291.15-0.0065*h_ECEF
                 H = 50*np.exp(-0.0006396*h_ECEF)
                 e = (H*0.01)*np.exp(-37.2465+0.213166*T*(0.000256908*T**2))
@@ -537,7 +501,9 @@ for sat_name in data['observations'][0]['satellite_info']:
                          3.0:0.757,
                          4.0:0.654,
                          5.0:0.563}
-                B = B_dict[min(B_dic, key=lambda x:abs(x-2.2))]
+                B = B_dic[min(B_dic, key=lambda x:abs(x-2.2))]
+                print B
+                break
                     
                 dtropo = (0.002277/math.cos(z))*(p+(1255/T+0.05)*e-B*(math.tan(z))**2 )
 
