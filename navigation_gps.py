@@ -416,192 +416,211 @@ for sat_name in data['observations'][0]['satellite_info']: #testing purposes, ep
         dic['satellite_info'][sat_name]['Tcorr'] = Tcorr
 
         ### START CALCULATION OF NAVIGATION POINT
+            
         if data['observations'][0]['flag'] == 0:
-            #ECEF APPROXIMATE XYZ COORDINATES OF REFERENCE STATION
-            approx_x = obs_header[0][0] #x
-            approx_y = obs_header[0][1] #y
-            approx_z = obs_header[0][2] #z
+            for i in range(6):
 
-            # Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates
-            approx_lat, approx_lon, approx_h = xyztolatlonh(approx_x,approx_y, approx_z)
-            print approx_lat, approx_lon, approx_h
-
-            #convert lon, lat coordinates of reference station to radians
-            approx_lat_rad = approx_lat*math.pi/180.0
-            approx_lon_rad = approx_lon*math.pi/180.0
-
-            print approx_lat_rad, approx_lon_rad
-        
-            # lets calculate the distance between the approx station point and the sat (using ECEF coords)
-            d = math.sqrt((sat_x-approx_x)**2+(sat_y-approx_y)**2+(sat_z-approx_z)**2)
-            
-            traveltime = d/c
-            print traveltime
-            wt = traveltime * rotation
-
-            # from xyz of sat at emission time to xyz at reception time
-            
-            R3 = np.array([[math.cos(traveltime*rotation),math.sin(traveltime*rotation),0],
-                          [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
-                          [0,0,1]])
-            sat_x_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[0]
-            
-            print float(sat_x_rot)
-            sat_y_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[1]
-            print float(sat_y_rot)
-            sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
-            print float(sat_z_rot)
-            #break
-            
-
-            dx = sat_x_rot - approx_x #x difference with station
-            dy = sat_y_rot - approx_y #y difference with station
-            dz = sat_z_rot - approx_z #z difference with station
-            dX = np.array([dx,dy,dz])
-
-            # Convert ECEF (XYZ) of the sats to lat, lon, h
-            lat, lon, h = xyztolatlonh(sat_x_rot,sat_y_rot,sat_z_rot)
-
-            # Convert lon, lat satellite coordinates to radians
-            lat_rad, lon_rad = lat * math.pi/180.0, lon * math.pi/180.0
-
-            # we use the lat lon h of the approx position of the station
-
-            ### USE REFERENCE STATION LAT, LON COORDINATES IN RADIANS
-            R31 = np.array([[-math.sin(approx_lat_rad)*math.cos(approx_lon_rad), -sin(approx_lat_rad)*sin(approx_lon_rad),cos(approx_lat_rad)],
-                           [-math.sin(approx_lon_rad),math.cos(approx_lon_rad),0],
-                           [math.cos(approx_lat_rad)*math.cos(approx_lon_rad), math.sin(approx_lon_rad)*math.cos(approx_lat_rad),math.sin(approx_lat_rad)]])
-            
-            NEh = np.dot(R31,dX) 
-            NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
-            print NEh
-            El_rad, Az_rad = Elev_Az.El_Az(NEh) #in radians
-            print El_rad, Az_rad
-            El_degr = El_rad * (180.0/math.pi) #convert to degrees
-            Az_degr = Az_rad * (180.0/math.pi) #convert to degrees
-            print El_degr, Az_degr
-
-            if El_degr > 10:
-                z_degr = 90 - El_degr # degrees
-                z_rad = z_degr * math.pi/180
-
-                #h_ECEF = float(sat_z_rot) #elipsoidal height
-                h_ECEF = approx_h
+                #######################################################################
+                ### CALCULATION AND CONVERSION OF SATELLITE AND STATION COORDINATES ###
+                #######################################################################
                 
-                p = 1013.25*(1-0.000065*h_ECEF)**(5.225)
-                print p
-                T = 291.15-0.0065*h_ECEF
-                print T
-                H = 50*math.exp(-0.0006396*h_ECEF)
-                print H
-                
-                e = (H*0.01)*math.exp(-37.2465+0.213166*T-(0.000256908*T**2))
-                print e
-                
-                #find smallest diff with height
-                #find corresponding B(mb)
+                #ECEF APPROXIMATE XYZ COORDINATES OF REFERENCE STATION
+                approx_x = obs_header[0][0] #x
+                approx_y = obs_header[0][1] #y
+                approx_z = obs_header[0][2] #z
 
-                B_dic = {0.0:1.156,
-                         0.5:1.079,
-                         1.0:1.006,
-                         1.5:0.938,
-                         2.0:0.874,
-                         2.5:0.813,
-                         3.0:0.757,
-                         4.0:0.654,
-                         5.0:0.563}
-                B = B_dic[min(B_dic, key=lambda x:abs(x-approx_h/1000))]
-                print B
-                
+                # Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates
+                approx_lat, approx_lon, approx_h = xyztolatlonh(approx_x,approx_y, approx_z)
+                print approx_lat, approx_lon, approx_h
+
+                #convert lon, lat coordinates of reference station to radians
+                approx_lat_rad = approx_lat*math.pi/180.0
+                approx_lon_rad = approx_lon*math.pi/180.0
+
+                print approx_lat_rad, approx_lon_rad
             
-                d_tropo=(0.002277/math.cos(z_rad))*(p+((1255/T)+0.05)*e-B*(math.tan(z_rad))**2)
-                print d_tropo
-
-                ### IONOSPHERIC DELAY ###
-                #ionospheric delay with klobuchar model
-
-                #1 calcualte earth centered angle
-                eca = 0.0137/((El_rad/math.pi)+0.11) - 0.022 #semicircles
-                print eca
-            
-                #2 compute the latitude of the ionospheric Pierce Point (IPP)
-                # lat corresponds with the users position
-                # A is azimuth of the satellite in radians
-
+                # lets calculate the distance between the approx station point and the sat (using ECEF coords)
+                d = math.sqrt((sat_x-approx_x)**2+(sat_y-approx_y)**2+(sat_z-approx_z)**2)
                 
-                ipp_lat = approx_lat_rad/math.pi + eca*math.cos(Az_rad)
-                if ipp_lat > 0.416:
-                    ipp_lat = 0.416
-                elif ipp_lat < -0.416:
-                    ipp_lat = -0.416
-                print ipp_lat
-            
-                #3 compute the longitude of ionospheric Pierce Point (IPP)
-                #lon corresponds with the users position
-                ipp_lon = approx_lon_rad/math.pi + eca*math.sin(Az_rad)/math.cos(ipp_lat*math.pi)
-                print ipp_lon
+                traveltime = d/c
+                print traveltime
+                wt = traveltime * rotation
 
-                #4 find the geomagnetic latitude of the IPP
-                geom_lat = ipp_lat + 0.064*math.cos((ipp_lon-1.617)*math.pi)
-                print geom_lat
-
-                #5 find the local time at the IPP
-                ipp_time = 43200 * ipp_lon + Trec
-                if ipp_time >= 86400:
-                    ipp_time -= 86400
-                elif ipp_time < 0:
-                    ipp_time += 86400
-                print ipp_time
-
-                #6 compute the amplitude of the ionospheric delay in seconds
-                Ai = []
-                for i in range(4):
-                    Ai.append(nav_header[0][i]*geom_lat**i)
+                # from xyz of sat at emission time to xyz at reception time
                 
-                Ai = sum(Ai)
-                if Ai < 0:
-                    Ai = 0
-                print Ai
-
-                #7 compute the period of the ionospheric delay in seconds
-                Pi = []
-                for i in range(4):
-                    Pi.append(nav_header[1][i]*geom_lat**i)
+                R3 = np.array([[math.cos(traveltime*rotation),math.sin(traveltime*rotation),0],
+                              [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
+                              [0,0,1]])
+                sat_x_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[0]
                 
-                Pi = sum(Pi)
-                print Pi
-                if Pi < 72000:
-                    Ai = 72000
-                print Pi
+                print float(sat_x_rot)
+                sat_y_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[1]
+                print float(sat_y_rot)
+                sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
+                print float(sat_z_rot)
 
-                #8 compute the phase of the ionospheric delay in radians!!!
-                Xi = 2*math.pi*(ipp_time-50400)/Pi
-                print Xi
+                dx = sat_x_rot - approx_x #x difference with station
+                dy = sat_y_rot - approx_y #y difference with station
+                dz = sat_z_rot - approx_z #z difference with station
+                dX = np.array([dx,dy,dz])
 
-                #9 compute the slant factor (elevation E in semicircles)
-                F = 1.0 + 16.0*(0.53-El_rad/math.pi)**3
-                print F
+                # Convert ECEF (XYZ) of the sats to lat, lon, h
+                lat, lon, h = xyztolatlonh(sat_x_rot,sat_y_rot,sat_z_rot)
 
-                #10 compute the ionospheric delay time
+                # Convert lon, lat satellite coordinates to radians
+                lat_rad, lon_rad = lat * math.pi/180.0, lon * math.pi/180.0
 
-                if Xi < 1.57:
-                    IL1 = (5e-9+Ai*(1 - Xi**2/2 + Xi**4/24))*F
+                # we use the lat lon h of the approx position of the station
+
+                ### USE REFERENCE STATION LAT, LON COORDINATES IN RADIANS
+                R31 = np.array([[-math.sin(approx_lat_rad)*math.cos(approx_lon_rad), -sin(approx_lat_rad)*sin(approx_lon_rad),cos(approx_lat_rad)],
+                               [-math.sin(approx_lon_rad),math.cos(approx_lon_rad),0],
+                               [math.cos(approx_lat_rad)*math.cos(approx_lon_rad), math.sin(approx_lon_rad)*math.cos(approx_lat_rad),math.sin(approx_lat_rad)]])
+                
+                NEh = np.dot(R31,dX) 
+                NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
+                print NEh
+                El_rad, Az_rad = Elev_Az.El_Az(NEh) #in radians
+                print El_rad, Az_rad
+                El_degr = El_rad * (180.0/math.pi) #convert to degrees
+                Az_degr = Az_rad * (180.0/math.pi) #convert to degrees
+                print El_degr, Az_degr
+
+                ### IN CASE THE SATELLITE ANGLE IS MORE THAN 10 DEGREES...
+                if El_degr > 10:
+
+                    ### TROPOSPHERIC DELAY ###
+                    
+                    z_degr = 90 - El_degr # degrees
+                    z_rad = z_degr * math.pi/180
+
+                    #h_ECEF = float(sat_z_rot) #elipsoidal height
+                    h_ECEF = approx_h
+                    
+                    p = 1013.25*(1-0.000065*h_ECEF)**(5.225)
+                    print p
+                    T = 291.15-0.0065*h_ECEF
+                    print T
+                    H = 50*math.exp(-0.0006396*h_ECEF)
+                    print H
+                    
+                    e = (H*0.01)*math.exp(-37.2465+0.213166*T-(0.000256908*T**2))
+                    print e
+                    
+                    #find smallest diff with height
+                    #find corresponding B(mb)
+
+                    B_dic = {0.0:1.156,
+                             0.5:1.079,
+                             1.0:1.006,
+                             1.5:0.938,
+                             2.0:0.874,
+                             2.5:0.813,
+                             3.0:0.757,
+                             4.0:0.654,
+                             5.0:0.563}
+                    B = B_dic[min(B_dic, key=lambda x:abs(x-approx_h/1000))]
+                    print B
+                    
+                
+                    d_tropo=(0.002277/math.cos(z_rad))*(p+((1255/T)+0.05)*e-B*(math.tan(z_rad))**2)
+                    print d_tropo
+
+                    ### IONOSPHERIC DELAY ###
+                    #ionospheric delay with klobuchar model
+
+                    #1 calcualte earth centered angle
+                    eca = 0.0137/((El_rad/math.pi)+0.11) - 0.022 #semicircles
+                    print eca
+                
+                    #2 compute the latitude of the ionospheric Pierce Point (IPP)
+                    # lat corresponds with the users position
+                    # A is azimuth of the satellite in radians
+
+                    
+                    ipp_lat = approx_lat_rad/math.pi + eca*math.cos(Az_rad)
+                    if ipp_lat > 0.416:
+                        ipp_lat = 0.416
+                    elif ipp_lat < -0.416:
+                        ipp_lat = -0.416
+                    print ipp_lat
+                
+                    #3 compute the longitude of ionospheric Pierce Point (IPP)
+                    #lon corresponds with the users position
+                    ipp_lon = approx_lon_rad/math.pi + eca*math.sin(Az_rad)/math.cos(ipp_lat*math.pi)
+                    print ipp_lon
+
+                    #4 find the geomagnetic latitude of the IPP
+                    geom_lat = ipp_lat + 0.064*math.cos((ipp_lon-1.617)*math.pi)
+                    print geom_lat
+
+                    #5 find the local time at the IPP
+                    ipp_time = 43200 * ipp_lon + Trec
+                    if ipp_time >= 86400:
+                        ipp_time -= 86400
+                    elif ipp_time < 0:
+                        ipp_time += 86400
+                    print ipp_time
+
+                    #6 compute the amplitude of the ionospheric delay in seconds
+                    Ai = []
+                    for i in range(4):
+                        Ai.append(nav_header[0][i]*geom_lat**i)
+                    
+                    Ai = sum(Ai)
+                    if Ai < 0:
+                        Ai = 0
+                    print Ai
+
+                    #7 compute the period of the ionospheric delay in seconds
+                    Pi = []
+                    for i in range(4):
+                        Pi.append(nav_header[1][i]*geom_lat**i)
+                    
+                    Pi = sum(Pi)
+                    print Pi
+                    if Pi < 72000:
+                        Ai = 72000
+                    print Pi
+
+                    #8 compute the phase of the ionospheric delay in radians!!!
+                    Xi = 2*math.pi*(ipp_time-50400)/Pi
+                    print Xi
+
+                    #9 compute the slant factor (elevation E in semicircles)
+                    F = 1.0 + 16.0*(0.53-El_rad/math.pi)**3
+                    print F
+
+                    #10 compute the ionospheric delay time
+
+                    if Xi < 1.57:
+                        IL1 = (5e-9+Ai*(1 - Xi**2/2 + Xi**4/24))*F
+                    else:
+                        IL1 = 5e-9 *F
+                    #transform to meters
+                    IL1 = IL1 * c
+                    print IL1
+
+                    #11 compute the ionospheric time delay for L2 in seconds
+                    IL2 = 1.65 * IL1
+                    print IL2
+
+                    ### EQUATION ###
+                    dist = math.sqrt((sat_x_rot-approx_x)**2+(sat_y_rot-approx_y)**2+(sat_z_rot-approx_z)**2)
+                    
+                    A = [-sat_x_rot-approx_x/dist,
+                         -sat_y_rot-approx_y/dist,
+                         -sat_z_rot-approx_z/dist,
+                         1]
+                    #R = p2 - dist - Trec + c*Tcorr - Dtrop - Dion
+                    break
+                    
                 else:
-                    IL1 = 5e-9 *F
-                #transform to meters
-                IL1 = IL1 * c
-                print IL1
-
-                #11 compute the ionospheric time delay for L2 in seconds
-                IL2 = 1.65 * IL1
-                print IL2
-                break
-                
-            else:
-                #elevation is less than 10 degrees
-                continue
-
-            #break
+                    #elevation is less than 10 degrees
+                    continue
+            print 'give it to me baby. Dame lo nena'
+            break
+                #break
         else:
             #flag is not 0
             continue
