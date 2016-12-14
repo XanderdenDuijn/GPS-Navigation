@@ -195,7 +195,7 @@ for epoch in data['observations']:
                 lst.remove(item)
             
     for delta_time,i in lst:
-        line = nav_file[i]
+        line = nav_file[i] #go to corresponding line
         nav_sat = int(line[:2])
         print 'NAV SAT', nav_sat
         #iterate over the satellite names of the obervation epoch
@@ -257,9 +257,9 @@ for epoch in data['observations']:
     break #this break is here for testing purposes. Only the first epoch will be used.
 
 
-for sat_name in data['observations'][0]['satellite_info']:
+for sat_name in data['observations'][0]['satellite_info']: #testing purposes, epoch = 0
+    print sat_name
     if sat_name[0] == 'G':
-        print sat_name
         y = data['observations'][0]['year'] +2000
         m = data['observations'][0]['month']
         d = data['observations'][0]['day']
@@ -422,7 +422,7 @@ for sat_name in data['observations'][0]['satellite_info']:
             approx_y = obs_header[0][1] #y
             approx_z = obs_header[0][2] #z
 
-            # Convert ECEF (XYZ) of reference station to lat, lon, h
+            # Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates
             approx_lat, approx_lon, approx_h = xyztolatlonh(approx_x,approx_y, approx_z)
             print approx_lat, approx_lon, approx_h
 
@@ -445,11 +445,13 @@ for sat_name in data['observations'][0]['satellite_info']:
                           [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
                           [0,0,1]])
             sat_x_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[0]
+            
             print float(sat_x_rot)
             sat_y_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[1]
             print float(sat_y_rot)
             sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
             print float(sat_z_rot)
+            #break
             
 
             dx = sat_x_rot - approx_x #x difference with station
@@ -473,25 +475,32 @@ for sat_name in data['observations'][0]['satellite_info']:
             NEh = np.dot(R31,dX) 
             NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
             print NEh
-            El, Az = Elev_Az.El_Az(NEh) #in radians
-            print El, Az
-            El = El * (180.0/math.pi)
-            Az = Az * (180.0/math.pi)
-            print El, Az
+            El_rad, Az_rad = Elev_Az.El_Az(NEh) #in radians
+            print El_rad, Az_rad
+            El_degr = El_rad * (180.0/math.pi) #convert to degrees
+            Az_degr = Az_rad * (180.0/math.pi) #convert to degrees
+            print El_degr, Az_degr
 
+            if El_degr > 10:
+                z_degr = 90 - El_degr # degrees
+                z_rad = z_degr * math.pi/180
 
-            
-            if El > 10:
-                z = 90 - El
-                h_ECEF = sat_z_rot #elipsoidal height
+                #h_ECEF = float(sat_z_rot) #elipsoidal height
+                h_ECEF = approx_h
+                
                 p = 1013.25*(1-0.000065*h_ECEF)**(5.225)
+                print p
                 T = 291.15-0.0065*h_ECEF
-                H = 50*np.exp(-0.0006396*h_ECEF)
-                e = (H*0.01)*np.exp(-37.2465+0.213166*T*(0.000256908*T**2))
+                print T
+                H = 50*math.exp(-0.0006396*h_ECEF)
+                print H
+                
+                e = (H*0.01)*math.exp(-37.2465+0.213166*T-(0.000256908*T**2))
+                print e
                 
                 #find smallest diff with height
                 #find corresponding B(mb)
-                
+
                 B_dic = {0.0:1.156,
                          0.5:1.079,
                          1.0:1.006,
@@ -501,39 +510,48 @@ for sat_name in data['observations'][0]['satellite_info']:
                          3.0:0.757,
                          4.0:0.654,
                          5.0:0.563}
-                B = B_dic[min(B_dic, key=lambda x:abs(x-2.2))]
+                B = B_dic[min(B_dic, key=lambda x:abs(x-approx_h/1000))]
                 print B
-                break
-                    
-                dtropo = (0.002277/math.cos(z))*(p+(1255/T+0.05)*e-B*(math.tan(z))**2 )
+                
+            
+                d_tropo=(0.002277/math.cos(z_rad))*(p+((1255/T)+0.05)*e-B*(math.tan(z_rad))**2)
+                print d_tropo
 
+                ### IONOSPHERIC DELAY ###
                 #ionospheric delay with klobuchar model
 
                 #1 calcualte earth centered angle
-                eca = 0.0137/E+0.11 - 0.022 #semicircles
-
+                eca = 0.0137/((El_rad/math.pi)+0.11) - 0.022 #semicircles
+                print eca
+            
                 #2 compute the latitude of the ionospheric Pierce Point (IPP)
-                # u_lat has to be in degrees!!! and corresponds with the users position
+                # lat corresponds with the users position
                 # A is azimuth of the satellite in radians
-                ipp_lat = u_lat/180 + eca*math.cos(A)
+
+                
+                ipp_lat = approx_lat_rad/math.pi + eca*math.cos(Az_rad)
                 if ipp_lat > 0.416:
                     ipp_lat = 0.416
                 elif ipp_lat < -0.416:
                     ipp_lat = -0.416
-
+                print ipp_lat
+            
                 #3 compute the longitude of ionospheric Pierce Point (IPP)
-                # u_lat has to be in degrees!!! and corresponds with the users position
-                ipp_lon = u_lon + eca*math.sin(A)/math.cos(ipp_lat)
+                #lon corresponds with the users position
+                ipp_lon = approx_lon_rad/math.pi + eca*math.sin(Az_rad)/math.cos(ipp_lat*math.pi)
+                print ipp_lon
 
                 #4 find the geomagnetic latitude of the IPP
                 geom_lat = ipp_lat + 0.064*math.cos((ipp_lon-1.617)*math.pi)
+                print geom_lat
 
                 #5 find the local time at the IPP
-                ipp_time = 43200 * ipp_lon + sec_of_week
+                ipp_time = 43200 * ipp_lon + Trec
                 if ipp_time >= 86400:
                     ipp_time -= 86400
                 elif ipp_time < 0:
                     ipp_time += 86400
+                print ipp_time
 
                 #6 compute the amplitude of the ionospheric delay in seconds
                 Ai = []
@@ -543,32 +561,42 @@ for sat_name in data['observations'][0]['satellite_info']:
                 Ai = sum(Ai)
                 if Ai < 0:
                     Ai = 0
+                print Ai
 
                 #7 compute the period of the ionospheric delay in seconds
                 Pi = []
                 for i in range(4):
-                    Pi.append(nav_header[0][i]*geom_lat**i)
+                    Pi.append(nav_header[1][i]*geom_lat**i)
                 
                 Pi = sum(Pi)
+                print Pi
                 if Pi < 72000:
-                    Ai = 72000                    
+                    Ai = 72000
+                print Pi
+
                 #8 compute the phase of the ionospheric delay in radians!!!
                 Xi = 2*math.pi*(ipp_time-50400)/Pi
+                print Xi
 
                 #9 compute the slant factor (elevation E in semicircles)
-                F = 1.0 + 16.0*(0.53-E)**3
+                F = 1.0 + 16.0*(0.53-El_rad/math.pi)**3
+                print F
 
                 #10 compute the ionospheric delay time
+
                 if Xi < 1.57:
-                    IL1 = 5e-9+Ai*(1-(Xi**2/2)+(Xi**4/24))*F
+                    IL1 = (5e-9+Ai*(1 - Xi**2/2 + Xi**4/24))*F
                 else:
                     IL1 = 5e-9 *F
+                #transform to meters
+                IL1 = IL1 * c
+                print IL1
 
                 #11 compute the ionospheric time delay for L2 in seconds
                 IL2 = 1.65 * IL1
-
-                #12 transform to meters
-                IL2 = IL2 * c
+                print IL2
+                break
+                
             else:
                 #elevation is less than 10 degrees
                 continue
