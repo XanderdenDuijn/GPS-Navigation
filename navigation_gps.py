@@ -2,7 +2,7 @@ from pyproj import Proj, transform
 import math
 import numpy as np
 from conversions import *
-#import utm
+import csv
 import Elev_Az
 
 ####################################
@@ -354,7 +354,7 @@ for sat_name in data['observations'][0]['satellite_info']: #testing purposes, ep
         print 'ECCENTRIC ANOMALY', E
 
         # Calculate true anomaly
-        v = math.atan((math.sqrt(1-e**2)*math.sin(E))/(math.cos(E)-e))
+        v = np.arctan2((math.sqrt(1-e**2)*math.sin(E)),(math.cos(E)-e))
         print 'TRUE ANOMALY', v
     
         # Argument of latitude
@@ -440,6 +440,11 @@ for sat in data['observations'][0]['satellite_info']:
         
 ### START CALCULATION OF NAVIGATION POINT
 
+output = open('results.csv', 'wt')
+writer = csv.writer(output, delimiter=',')
+fieldnames = ['Hour', 'Min', 'Sec', 'X', 'Y', 'Z', 'Xerror', 'Yerror', 'Zerror', 'Lat', 'Lon', 'h']
+writer.writerow(fieldnames)
+
 ### REFERENCE STATION ###
 
 #ECEF APPROXIMATE XYZ COORDINATES OF REFERENCE STATION
@@ -463,13 +468,16 @@ for obs_idx, epoch in enumerate(data['observations']):
     print
 
 
-    if data['observations'][obs_idx]['flag'] == 0: 
+    if data['observations'][obs_idx]['flag'] == 0:
+        print 'EPOCH NUMBER: ', obs_idx
         ### WE WILL DO THIS 6 TIMES ###
         
         dTrec = 0
         
         for itr in range(6):
-            print 'itr', itr
+            print 
+            print 'ITERATION NUMBER: ', itr
+            print
             
             #initialize what will be matrices to calc receiver position
             A_lst = []
@@ -480,10 +488,10 @@ for obs_idx, epoch in enumerate(data['observations']):
             #HERE WE NEED TO ITERATE OVER THE SATS
 
             for sat in data['observations'][obs_idx]['satellite_info']:
-                print itr, obs_idx
-                print sat
+                
+                
                 if sat[0] == 'G':
-                    print sat
+                    print 'SATELLITE: ', sat
                     print
                     
                     sat_x = data['observations'][obs_idx]['satellite_info'][sat]['X']
@@ -523,9 +531,12 @@ for obs_idx, epoch in enumerate(data['observations']):
                     sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
                     print float(sat_z_rot)
 
-                    dx = sat_x_rot - approx_x #x difference with station
-                    dy = sat_y_rot - approx_y #y difference with station
-                    dz = sat_z_rot - approx_z #z difference with station
+                    dx = [float(sat_x_rot - approx_x)] #x difference with station as array
+                    print dx
+                    dy = [float(sat_y_rot - approx_y)] #y difference with station as array
+                    print dy
+                    dz = [float(sat_z_rot - approx_z)] #z difference with station as array
+                    print dz
                     dX = np.array([dx,dy,dz])
 
                     # Convert ECEF (XYZ) of the sats to lat, lon, h
@@ -540,6 +551,7 @@ for obs_idx, epoch in enumerate(data['observations']):
                     R31 = np.array([[-math.sin(approx_lat_rad)*math.cos(approx_lon_rad), -sin(approx_lat_rad)*sin(approx_lon_rad),cos(approx_lat_rad)],
                                    [-math.sin(approx_lon_rad),math.cos(approx_lon_rad),0],
                                    [math.cos(approx_lat_rad)*math.cos(approx_lon_rad), math.sin(approx_lon_rad)*math.cos(approx_lat_rad),math.sin(approx_lat_rad)]])
+
                     
                     NEh = np.dot(R31,dX) 
                     NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
@@ -550,8 +562,13 @@ for obs_idx, epoch in enumerate(data['observations']):
                     Az_degr = Az_rad * (180.0/math.pi) #convert to degrees
                     print El_degr, Az_degr
 
+                    print
+                    print 'DEGREE OF ELEVATION', El_degr
+                    print
+                    
                     ### IN CASE THE SATELLITE ANGLE IS MORE THAN 10 DEGREES...
                     if El_degr > 10:
+
 
                         ### TROPOSPHERIC DELAY ###
                         
@@ -668,20 +685,24 @@ for obs_idx, epoch in enumerate(data['observations']):
                         print IL2
 
                         #actual distance
-                        d_ion = c*IL2
+                        d_ion = IL2
 
                         ### EQUATION ###
                         dist = math.sqrt((sat_x_rot-approx_x)**2+(sat_y_rot-approx_y)**2+(sat_z_rot-approx_z)**2)
-                        
-                        A = [-sat_x_rot-approx_x/dist,
-                             -sat_y_rot-approx_y/dist,
-                             -sat_z_rot-approx_z/dist,
-                             1]
-                        
-                        
-                        R = p2 - dist - dTrec + c*Tcorr - d_tropo - d_ion
 
-                        W = math.sin(El_rad)**2/0.3**2
+                        
+                        A = [float(-(sat_x_rot-approx_x)/dist),
+                             float(-(sat_y_rot-approx_y)/dist),
+                             float(-(sat_z_rot-approx_z)/dist),
+                             1]
+
+                        Tcorr = data['observations'][obs_idx]['satellite_info'][sat]['Tcorr']
+                        p2 = float(data['observations'][obs_idx]['satellite_info'][sat]['P2'])
+                        R = [float(p2 - dist - dTrec + c*Tcorr - d_tropo - d_ion)]
+
+                        
+                        W = [float(math.sin(El_rad)**2/(1.5*0.3)**2)]
+                        print 'ARW VALUES'
                         print A
                         print R
                         print W
@@ -692,40 +713,101 @@ for obs_idx, epoch in enumerate(data['observations']):
                         #break
                         
                     else:
+                        print 'elevation is less than 10 degrees'
                         #elevation is less than 10 degrees
                         continue
                 else:
                     print 'this is not a gps satellite'
                     continue
 
-                if len(A_lst)>=4: #we use A_lst here, but we could use R_lst and W_lst as well
-                    print 'yes we can calculate the receivers position'
-                    A_array = np.matrix(A)
-                    print A_array
-                    R_array = np.array(R)
-                    #print R_array
-                    W_array = np.array(W)
-                    W_diag = np.diag(W_array)
-                    #print W_array
+            print 'ITERATED OVER ALL GOOD SATELLITES'
 
-                    WA = np.dot(W_diag,A_array)
-                    WR = np.dot(W_diag,R_array)
-
-                    result = np.linalg.lstsq(WA,WR)
-                    #print result
-                    
-                    
-                else:
-                    print 'no, there are not enough good satellites'
-                    
-                print 'give it to me baby. Dame lo nena'
+            if len(A_lst)>=4: #we use A_lst here, but we could use R_lst and W_lst as well
+                ### LEAST SQUARED SOLUTION ###
+                print 'yes we can calculate the receivers position'
+                print A_lst
+                print len(A_lst)
+                A_matrix = np.matrix(A_lst)
+                print A_matrix
                 
-                    #break
+                R_matrix = np.matrix(R_lst)
+                print R_matrix
+
+                W_matrix = np.matrix(W_lst)
+                W_matrix = np.diagflat(W_matrix)
+                print W_matrix
+
+                k = np.dot(A_matrix.transpose(),W_matrix)
+                print k  
+
+                s = np.linalg.inv(np.dot(k,A_matrix))
+                print s
+                k2 = np.dot(A_matrix.transpose(),W_matrix)
+                print k2
+                
+                k3 = np.dot(k2,R_matrix)
+                print k3
+                
+                xfin = np.dot(s,k3)
+                print xfin
+                
+                dX_coord = xfin[0]
+                print dX_coord
+                dY_coord = xfin[1]
+                print dY_coord
+                dZ_coord = xfin[2]
+                print dZ_coord
+                dT = xfin[3]
+                print dT
+
+                res = np.dot(A_matrix,xfin)-R_matrix
+                print res
+
+                approx_x = approx_x + dX_coord
+                print 'x coordinate: ', approx_x
+                approx_y = approx_y + dY_coord
+                print 'y coordinate: ', approx_y
+                approx_z = approx_z + dZ_coord
+                print 'z coordinate: ', approx_z
+                dTrec = dT
+                print dTrec
+
+                print
+                print xyztolatlonh(approx_x,approx_y, approx_z)
+                
+                
+                
+                
+            else:
+                print 'no, there are not enough good satellites'
+                
+            print 'give it to me baby. Dame lo nena'
+            
+          
+        print 'hallo'
+        lat,lon,h = xyztolatlonh(approx_x,approx_y, approx_z)
+        
+        (m,n)=A_matrix.shape
+        desv1=np.dot(res.transpose(),W_matrix)
+        desv2=np.dot(desv1,res)
+        des=desv2/(m-n)
+
+        desx=math.sqrt(des*s[0,0])
+        desy=math.sqrt(des*s[1,1])
+        desz=math.sqrt(des*s[2,2])
+        
+        print desx,desy,desz
+
+        ### write results to file ###
+        #writer.writerow([1,2,3,4,5,6,desx,desy,desz,lat,lon,h])
+        break
     else:
         #flag is not 0
         continue
     break
+output.close()
 
+### plot and map ###
 
 #print data['observations'][0]['satellite_info']['G02']
 
