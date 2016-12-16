@@ -4,6 +4,9 @@ import numpy as np
 from conversions import *
 import csv
 import Elev_Az
+import pygmaps
+import webbrowser
+import os
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -480,6 +483,11 @@ print approx_lat_rad, approx_lon_rad
 
 #----------------------------------------------------------------------
 
+xerrors = []
+yerrors = []
+zerrors = []
+solutions = []
+
 for obs_idx, epoch in enumerate(data['observations']):
     print
     print obs_idx
@@ -804,23 +812,69 @@ for obs_idx, epoch in enumerate(data['observations']):
         des=desv2/(m-n)
 
         desx=math.sqrt(des*s[0,0])
+        xerrors.append(desx)
         desy=math.sqrt(des*s[1,1])
+        yerrors.append(desy)
         desz=math.sqrt(des*s[2,2])
+        zerrors.append(desz)
         
         print desx,desy,desz
 
-        ### write results to file ###
+        
         hh = data['observations'][obs_idx]['hour']
         mm = data['observations'][obs_idx]['min']
         ss = data['observations'][obs_idx]['sec']
-        writer.writerow([hh,mm,ss,approx_x,approx_y,approx_z,desx,desy,desz,lat,lon,h])
+
+        solutions.append([hh,mm,ss,approx_x,approx_y,approx_z,desx,desy,desz,lat,lon,h])
+        
         #break
     else:
         print 'flag is not 0, this this observation/epoch is not valid'
         #flag is not 0
         continue
     #break
+
+mean_xerror = sum(xerrors)/len(xerrors)
+mean_yerror = sum(yerrors)/len(yerrors)
+mean_zerror = sum(zerrors)/len(zerrors)
+
+print mean_xerror, mean_yerror, mean_zerror
+
+mymap = pygmaps.maps(lat, lon, 13)
+
+for nr, solution in enumerate(solutions):
+    #check if error is less than 1.5 * mean error
+    hh = solution[0]
+    mm = solution[1]
+    ss = solution[2]
+    x = solution[3]
+    y = solution[4]
+    z = solution[5]
+    xerror = solution[6]
+    yerror = solution[7]
+    zerror = solution[8]
+    lat = solution[9]
+    lon = solution[10]
+    h = solution[11]
+    if xerror < 1.5*mean_xerror and yerror < 1.5*mean_yerror and zerror < 1.5*mean_zerror:
+        writer.writerow([hh,mm,ss,x,y,z,xerror,yerror,zerror,lat,lon,h])
+        #mymap.addpoint(lat, lon, "#0000FF")
+        mymap.addradpoint(lat, lon, 3, "#FF0000")
+    
+        
+    print nr
+
+
 output.close()
+
+fname = 'solutions'
+#create map file
+mymap.draw('./'+fname+'.html')
+
+abspath = os.path.abspath(fname+'.html')
+    
+# open map in browser
+webbrowser.open('file:///'+abspath,2,True)
 
 ### plot and map ###
 
