@@ -7,6 +7,7 @@ import Elev_Az
 import pygmaps
 import webbrowser
 import os
+import matplotlib.pyplot as plt
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -266,11 +267,10 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
             else:
                 # It is not a GPS satellite
                 continue
-    #print epoch
-    #break #this break is here for testing purposes. Only the first epoch will be used.
 
-##for sat_name in data['observations'][0]['satellite_info']: #testing purposes, epoch = 0
-##    print sat_name
+###################################################
+### COMPUTE SATELLITE COORDINATE FOR EACH EPOCH ###
+###################################################
 
 for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
     print obs_idx
@@ -282,7 +282,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
     
         #it has to be a GPS satellite
         if sat_name[0] == 'G':
-            try:            
+            try: #it could be that there is no p2 value
                 y = data['observations'][obs_idx]['year'] +2000
                 m = data['observations'][obs_idx]['month']
                 d = data['observations'][obs_idx]['day']
@@ -369,7 +369,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                     E = M + e * math.sin(E)
                 #print 'ECCENTRIC ANOMALY', E
 
-                # Calculate true anomaly
+                # Calculate true anomaly with arctan2 (to avoid negative angels)
                 v = np.arctan2((math.sqrt(1-e**2)*math.sin(E)),(math.cos(E)-e))
                 #print 'TRUE ANOMALY', v
             
@@ -413,8 +413,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                 lon_asc = OMEGA + (OMEGA_DOT - rotation) * Temis - rotation * Toe
                 #print lon_asc
 
-                # final satellite coordinates (ECEF) !!!at emission time!!!
-                #print 'FINAL SATELLITE COORDINATES'
+                # Final satellite coordinates (ECEF) !!!at emission time!!!
                 sat_x = xop * math.cos(lon_asc)-yop*math.cos(i)*math.sin(lon_asc)
                 sat_y = xop * math.sin(lon_asc)+yop*math.cos(i)*math.cos(lon_asc)
                 sat_z = yop*math.sin(i)
@@ -422,6 +421,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                 #print sat_y
                 #print sat_z
 
+                #add coordinates to main dictionary
                 data['observations'][obs_idx]['satellite_info'][sat_name]['X'] = float(sat_x)
                 data['observations'][obs_idx]['satellite_info'][sat_name]['Y'] = float(sat_y)
                 data['observations'][obs_idx]['satellite_info'][sat_name]['Z'] = float(sat_z)
@@ -438,6 +438,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                 Tcorr = Tcorr2 + trel - TGD_L2
                 #print 'Tcorr', Tcorr
 
+                #add correction and sec_of_week to main dictionary
                 data['observations'][obs_idx]['satellite_info'][sat_name]['Tcorr'] = Tcorr
                 data['observations'][obs_idx]['satellite_info'][sat_name]['sec_of_week'] = Trec
             except:
@@ -450,21 +451,18 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
             data['observations'][obs_idx]['satellite_info'][sat_name]['X'] = 'None'
             data['observations'][obs_idx]['satellite_info'][sat_name]['Y'] = 'None'
             data['observations'][obs_idx]['satellite_info'][sat_name]['Z'] = 'None'
-
-        continue
-
-##for sat in data['observations'][0]['satellite_info']:
-##    print sat
-##    print data['observations'][0]['satellite_info'][sat]['X']
         
-### START CALCULATION OF NAVIGATION POINT
+
+##################################################
+### START CALCULATION OF THE NAVIGATION POINTS ###
+##################################################
 
 output = open('results.csv', 'wb')
 writer = csv.writer(output, delimiter=',')
 fieldnames = ['Hour', 'Min', 'Sec', 'X', 'Y', 'Z', 'Xerror', 'Yerror', 'Zerror', 'Lat', 'Lon', 'h']
 writer.writerow(fieldnames)
 
-### REFERENCE STATION ###
+### REFERENCE STATION INFORMATION ###
 
 #ECEF APPROXIMATE XYZ COORDINATES OF REFERENCE STATION
 approx_x = obs_header[0][0] #x
@@ -473,51 +471,42 @@ approx_z = obs_header[0][2] #z
 
 # Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates
 approx_lat, approx_lon, approx_h = xyztolatlonh(approx_x,approx_y, approx_z)
-print approx_lat, approx_lon, approx_h
+#print approx_lat, approx_lon, approx_h
 
 #convert lon, lat coordinates of reference station to radians
 approx_lat_rad = approx_lat*math.pi/180.0
 approx_lon_rad = approx_lon*math.pi/180.0
 
-print approx_lat_rad, approx_lon_rad
-
-#----------------------------------------------------------------------
-
+solutions = [] #final results
 xerrors = []
 yerrors = []
 zerrors = []
-solutions = []
 
 for obs_idx, epoch in enumerate(data['observations']):
     print
     print obs_idx
     print
 
-
     if data['observations'][obs_idx]['flag'] == 0:
         print 'EPOCH NUMBER: ', obs_idx
-        ### WE WILL DO THIS 6 TIMES ###
-        
+         
         dTrec = 0
         
+        ### ITERATE 6 TIMES TO SOLVE NAVIGATION POINT COORDINATES ###
         for itr in range(6):
-            print 
-            print 'ITERATION NUMBER: ', itr
-            print
+            #print 
+            #print 'ITERATION NUMBER: ', itr
+            #print
             
-            #initialize what will be matrices to calc receiver position
+            #initialize the matrices to calc receiver position
             A_lst = []
             R_lst = []
             W_lst = []
-
-            
-            #HERE WE NEED TO ITERATE OVER THE SATS
-
-            for sat in data['observations'][obs_idx]['satellite_info']:
-                
-                
+ 
+            #ITERATE OVER EACH SATELLITE
+            for sat in data['observations'][obs_idx]['satellite_info']:   
                 if sat[0] == 'G':
-                    print 'SATELLITE: ', sat
+                    #print 'SATELLITE: ', sat
                     
                     #print obs_idx, sat
                     sat_x = data['observations'][obs_idx]['satellite_info'][sat]['X']
@@ -527,25 +516,21 @@ for obs_idx, epoch in enumerate(data['observations']):
                     sat_z = data['observations'][obs_idx]['satellite_info'][sat]['Z']
                     #print sat_z
 
+                    # the xyz coordinates of the satellite should be valid
                     if sat_x != 'None' and sat_y != 'None' and sat_z != 'None':
 
-                        #------------------------------------------------------------#
-                            
-
-                        ###########################################################
-                        ### CALCULATION AND CONVERSION OF SATELLITE COORDINATES ###
-                        ###########################################################
-                        
-                            
-                    
-                        # lets calculate the distance between the approx station point and the sat (using ECEF coords)
+                        ############################################
+                        ### CALCULATION OF SATELLITE COORDINATES ###
+                        ############################################
+ 
+                        # calculate the distance between the approx station point and the sat (using ECEF coords)
                         d = math.sqrt((sat_x-approx_x)**2+(sat_y-approx_y)**2+(sat_z-approx_z)**2)
                         
                         traveltime = d/c
                         #print traveltime
                         wt = traveltime * rotation
 
-                        # from xyz of sat at emission time to xyz at reception time
+                        ### from xyz of sat at emission time to xyz at reception time
                         
                         R3 = np.array([[math.cos(traveltime*rotation),math.sin(traveltime*rotation),0],
                                       [-math.sin(traveltime*rotation),math.cos(traveltime*rotation),0],
@@ -558,6 +543,7 @@ for obs_idx, epoch in enumerate(data['observations']):
                         sat_z_rot = np.dot(R3,np.array([[sat_x],[sat_y],[sat_z]]))[2]
                         #print float(sat_z_rot)
 
+                        # delta distances to satellite
                         dx = [float(sat_x_rot - approx_x)] #x difference with station as array
                         #print dx
                         dy = [float(sat_y_rot - approx_y)] #y difference with station as array
@@ -572,14 +558,11 @@ for obs_idx, epoch in enumerate(data['observations']):
                         # Convert lon, lat satellite coordinates to radians
                         lat_rad, lon_rad = lat * math.pi/180.0, lon * math.pi/180.0
 
-                        # we use the lat lon h of the approx position of the station
-
-                        ### USE REFERENCE STATION LAT, LON COORDINATES IN RADIANS
+                        #matrix/formula to tranform coordinate systems
                         R31 = np.array([[-math.sin(approx_lat_rad)*math.cos(approx_lon_rad), -sin(approx_lat_rad)*sin(approx_lon_rad),cos(approx_lat_rad)],
                                        [-math.sin(approx_lon_rad),math.cos(approx_lon_rad),0],
                                        [math.cos(approx_lat_rad)*math.cos(approx_lon_rad), math.sin(approx_lon_rad)*math.cos(approx_lat_rad),math.sin(approx_lat_rad)]])
 
-                        
                         NEh = np.dot(R31,dX) 
                         NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
                         #print NEh
@@ -727,7 +710,6 @@ for obs_idx, epoch in enumerate(data['observations']):
                             A_lst.append(A)
                             R_lst.append(R)
                             W_lst.append(W)
-                            #break
                             
                         else:
                             print 'elevation is less than 10 degrees'
@@ -741,9 +723,11 @@ for obs_idx, epoch in enumerate(data['observations']):
 
             print 'ITERATED OVER ALL GOOD SATELLITES'
 
+            # calculate receivers position when there are at keast 4 proper sats on the sky
             if len(A_lst)>=4: #we use A_lst here, but we could use R_lst and W_lst as well
                 ### LEAST SQUARED SOLUTIONS ###
                 print 'yes we can calculate the receivers position'
+
                 #print A_lst
                 #print len(A_lst)
                 A_matrix = np.matrix(A_lst)
@@ -790,8 +774,6 @@ for obs_idx, epoch in enumerate(data['observations']):
                 #print 'z coordinate: ', approx_z
                 dTrec = dT
                 #print dTrec
-
-                
                    
             else:
                 print 'There are not enough good satellites to calc the receivers position'
@@ -799,7 +781,7 @@ for obs_idx, epoch in enumerate(data['observations']):
             #print 'give it to me baby. Dame lo nena'
             
           
-        print 'VAMONOS, WE GOT THIS'
+        print 'Dame los coordenades'
 
         print approx_x, approx_y, approx_z
         lat,lon,h = xyztolatlonh(approx_x,approx_y, approx_z)
@@ -820,7 +802,6 @@ for obs_idx, epoch in enumerate(data['observations']):
         
         print desx,desy,desz
 
-        
         hh = data['observations'][obs_idx]['hour']
         mm = data['observations'][obs_idx]['min']
         ss = data['observations'][obs_idx]['sec']
@@ -834,15 +815,24 @@ for obs_idx, epoch in enumerate(data['observations']):
         continue
     #break
 
-mean_xerror = sum(xerrors)/len(xerrors)
-mean_yerror = sum(yerrors)/len(yerrors)
-mean_zerror = sum(zerrors)/len(zerrors)
+mean_xerror = np.mean(xerrors)
+mean_yerror = np.mean(yerrors)
+mean_zerror = np.mean(zerrors)
 
 print mean_xerror, mean_yerror, mean_zerror
 
+##########################################################
+### write solutions to file and map navigations points ###
+##########################################################
+
 mymap = pygmaps.maps(lat, lon, 13)
 
-for nr, solution in enumerate(solutions):
+final_x = []
+final_y = []
+final_lat = []
+final_lon = []
+
+for solution in solutions:
     #check if error is less than 1.5 * mean error
     hh = solution[0]
     mm = solution[1]
@@ -856,14 +846,31 @@ for nr, solution in enumerate(solutions):
     lat = solution[9]
     lon = solution[10]
     h = solution[11]
+    #only use the ones with a error less than 1.5*mean_error
     if xerror < 1.5*mean_xerror and yerror < 1.5*mean_yerror and zerror < 1.5*mean_zerror:
+        final_x.append(x)
+        final_y.append(y)
+        final_lat.append(lat)
+        final_lon.append(lon)
         writer.writerow([hh,mm,ss,x,y,z,xerror,yerror,zerror,lat,lon,h])
-        #mymap.addpoint(lat, lon, "#0000FF")
         mymap.addradpoint(lat, lon, 3, "#FF0000")
-    
-        
-    print nr
 
+#plots
+plt.plot(final_y, final_x) #y,x
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('x y')
+plt.grid(True)
+plt.savefig("xy.png")
+#plt.show()
+
+
+plt.plot(final_lat, final_lon) #y,x
+plt.xlabel('lon')
+plt.ylabel('lat')
+plt.title('lat lon')
+plt.grid(True)
+plt.savefig("latlon.png")
 
 output.close()
 
@@ -876,11 +883,6 @@ abspath = os.path.abspath(fname+'.html')
 # open map in browser
 webbrowser.open('file:///'+abspath,2,True)
 
-### plot and map ###
 
-#print data['observations'][0]['satellite_info']['G02']
-
-#for k in data['observations'][0]['satellite_info']['G02']:
-#print k
 
 
