@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 #import matplotlib.dates as plt_dates
 import datetime
 
-import plots
+#import plots
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -26,7 +26,7 @@ obs_input.close()
 ##########################
 
 obs_header = []
-obs_types = []
+obs_types_temp = [] #will be a list of lists
 i = 0 # i = line number
 for i,line in enumerate(obs_file):
     if 'APPROX POSITION XYZ' in line:
@@ -36,20 +36,34 @@ for i,line in enumerate(obs_file):
             aprox_xyz.append(coord)
         obs_header.append(aprox_xyz)
     elif 'ANTENNA: DELTA H/E/N' in line:
-        obs_header.append(line)
+        delta_hen = []
+        for idx in range(0,42,14):
+            hen_value = float(line[idx:idx+14].strip())
+            delta_hen.append(hen_value)
+        obs_header.append(delta_hen)   
     elif '# / TYPES OF OBSERV' in line:
+        ##### UPDATE REQUIREDDD!!!!!! #####
         # iterate over line with steps of 6 chars, starting at 6
         # 9 iterations = nr of possible observation types in 1 line
-        for idx in range(6,60,6):  
-            obs_types.append(line[idx:idx+6].strip())
+        for idx in range(0,60,6):
+            obs_type = line[idx:idx+6].strip()
+            obs_types_temp.append(line[idx:idx+6].strip())
+       
     elif 'TIME OF FIRST OBS' in line:
+        ### make nice ###
         obs_header.append(line)
     elif 'END OF HEADER' in line:
         break   
 
-obs_nr = int(obs_header[2][:6].strip()) #number of different observation types
-obs_header.insert(2,obs_types)
 
+obs_types = [] #final list for observation 
+obs_nr = obs_types_temp[0] #the first item is the number of satellites
+obs_types_temp.pop(0) #remove nr of satellites from obs_types
+for obs_type in obs_types_temp:
+    if obs_type: #if there is a observation type
+        obs_types.append(obs_type)
+obs_header.insert(2,obs_types) #put the list of observations in the correct spot
+        
 ################################
 ### READING THE OBSERVATIONS ###
 ################################
@@ -76,6 +90,7 @@ while i < len(obs_file):
         
     nr_sats = int(cur_line[30:char_idx])
 
+    #string with satellite identification
     if nr_sats > 12:
         sat_id = cur_line[char_idx:-1]+next_line[char_idx:-1]
         i += 2
@@ -89,7 +104,7 @@ while i < len(obs_file):
     for idx in range(0,len(sat_id),3):
         sat_names.append(sat_id[idx:idx+3])
 
-    dic = {}
+    dic = {} #for every epoch
     ### FILL THE DICTIONARY
     dic['epoch'] = epoch_nr
     dic['year'] = int(epoch[0])
@@ -107,18 +122,19 @@ while i < len(obs_file):
     
     ### REACH OBSERVATIONS
 
-    for obs_idx,j in enumerate(range(i,i+nr_sats)):
+    for obs_idx,j in enumerate(range(i,i+nr_sats)): #internal loop iterating over lines with observation values
         cur_line = obs_file[j][:-1]
+        #map satellite, observation types and values --> put in dictionary
         for obstype_idx, obs_val in enumerate(range(0,len(cur_line[:-1]),16)):
             dic['satellite_info'][sat_names[obs_idx]][obs_types[obstype_idx]] = cur_line[obs_val:obs_val+14].strip()     
 
     data['observations'].append(dic) #append the observation data to the main dict
     epoch_nr += 1
-    i += nr_sats
+    i += nr_sats #go to next line with epoch information
 
 
 ####################################
-### READING THE NAVIGATION FILE ###
+### READING THE NAVIGATION FILE ####
 ####################################
 
 nav_input = open('brdc0590.11n','r')
@@ -126,7 +142,7 @@ nav_file = nav_input.readlines()
 nav_input.close()
 
 ##########################
-### READIND THE HEADER ###
+### READING THE HEADER ###
 ##########################
 
 nav_header = []
@@ -151,7 +167,8 @@ for i,line in enumerate(nav_file):
             ion_beta.append(value)
         nav_header.append(ion_beta)
     elif 'LEAP SECONDS' in line:
-        nav_header.append(line)
+        leap_sec = int(line[0:50].strip())
+        nav_header.append(leap_sec)
     elif 'END OF HEADER' in line:
         break
 
@@ -164,8 +181,7 @@ start_i = i
 ########################
 
 for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
-    print obs_idx
-    
+    print obs_idx   
     
     obs_time = GDtoJD(epoch['day'], epoch['month'], epoch['year'], epoch['hour'], epoch['min'], epoch['sec'])
 
@@ -174,6 +190,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
     minute = 1/(24*3600.0)
     
     lst = []
+    # read navigation epoch with orbital parameters
     # get navigation satellite and epoch data
     # jumping over 8 lines
     for i in range(start_i, len(nav_file),8):
@@ -214,7 +231,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
         nav_sat = int(line[:2])
         #print 'NAV SAT', nav_sat
         
-        #iterate over the satellite names of the obervation epoch
+        #iterate over the satellite names of the obervation epoch to enrich the data structure
         for sat_name in epoch['satellite_info']:
             #print sat_name
             # it must be a GPS satellite (G)
@@ -266,7 +283,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                     params['Transmission Time'] = float(params_lst[27].strip())
                     params['Fit Interval'] = float(params_lst[28].strip())
                 else:
-                    #this is not the satellite we are looking for at the moment
+                    #this is not the satellite we are looking for at the moment/or has not been observed
                     continue
             else:
                 # It is not a GPS satellite
@@ -277,9 +294,11 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
 ###################################################
 
 for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
+    #print epoch
     print obs_idx
     
-    for sat_name in data['observations'][obs_idx]['satellite_info']: #testing purposes, epoch = 0
+    for sat_name in epoch['satellite_info']: #iterate over satellites=keys
+         
         #print
         #print 'SATELLITE NAME', sat_name
         #print
@@ -346,9 +365,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
                 #print 'Final emission time', Temis
 
                 ### START COMPUTATION OF SATELLITE COORDINATES ###
-                #print
-                #print 'START COMPUTATION OF THE SATELLITE COORDINATES'
-                #print
+
                 # Semi-Major axis of the satellite orbit
                 a = data['observations'][obs_idx]['satellite_info'][sat_name]['params']['Sqrt(a)']
                 a = a**2
@@ -461,6 +478,7 @@ for obs_idx, epoch in enumerate(data['observations']): #epoch is a dict
 ### START CALCULATION OF THE NAVIGATION POINTS ###
 ##################################################
 
+#create csv output file
 output = open('results.csv', 'wb')
 writer = csv.writer(output, delimiter=',')
 fieldnames = ['Hour', 'Min', 'Sec', 'X', 'Y', 'Z', 'Xerror', 'Yerror', 'Zerror', 'Lat', 'Lon', 'h']
@@ -473,7 +491,7 @@ approx_x = obs_header[0][0] #x
 approx_y = obs_header[0][1] #y
 approx_z = obs_header[0][2] #z
 
-# Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates
+# Convert ECEF (XYZ) of reference station to lat, lon, h / ellipsoidal coordinates / geodetic coordinates
 approx_lat, approx_lon, approx_h = xyztolatlonh(approx_x,approx_y, approx_z)
 #print approx_lat, approx_lon, approx_h
 
@@ -508,9 +526,9 @@ for obs_idx, epoch in enumerate(data['observations']):
             W_lst = []
  
             #ITERATE OVER EACH SATELLITE
-            for sat in data['observations'][obs_idx]['satellite_info']:   
+            for sat in data['observations'][obs_idx]['satellite_info']:
                 if sat[0] == 'G':
-                    #print 'SATELLITE: ', sat
+                    print 'SATELLITE: ', sat
                     
                     #print obs_idx, sat
                     sat_x = data['observations'][obs_idx]['satellite_info'][sat]['X']
@@ -598,7 +616,7 @@ for obs_idx, epoch in enumerate(data['observations']):
                             #print e
                             
                             #find smallest diff with height
-                            #find corresponding B(mb)
+                            #find corresponding B(mb) parameter
 
                             B_dic = {0.0:1.156,
                                      0.5:1.079,
@@ -678,12 +696,13 @@ for obs_idx, epoch in enumerate(data['observations']):
                             F = 1.0 + 16.0*(0.53-El_rad/math.pi)**3
                             #print F
 
-                            #10 compute the ionospheric delay time
+                            #10 compute the ionospheric delay time (in seconds) for L1
 
                             if Xi < 1.57:
                                 IL1 = (5e-9+Ai*(1 - Xi**2/2 + Xi**4/24))*F
                             else:
                                 IL1 = 5e-9 *F
+
                             #transform to meters
                             IL1 = IL1 * c
                             #print IL1
@@ -695,7 +714,7 @@ for obs_idx, epoch in enumerate(data['observations']):
                             #actual distance
                             d_ion = IL2
 
-                            ### EQUATION ###
+                            ### SYSTEM EQUATION ###
                             dist = math.sqrt((sat_x_rot-approx_x)**2+(sat_y_rot-approx_y)**2+(sat_z_rot-approx_z)**2)
 
                             
@@ -724,7 +743,8 @@ for obs_idx, epoch in enumerate(data['observations']):
                 else:
                     print 'this is not a gps satellite'
                     continue
-
+            print
+            print 
             print 'ITERATED OVER ALL GOOD SATELLITES'
 
             # calculate receivers position when there are at keast 4 proper sats on the sky
@@ -734,28 +754,26 @@ for obs_idx, epoch in enumerate(data['observations']):
 
                 #print A_lst
                 #print len(A_lst)
-                A_matrix = np.matrix(A_lst)
+                A_matrix = np.matrix(A_lst) #size: nr of sats * 4
                 #print A_matrix
                 
-                R_matrix = np.matrix(R_lst)
+                R_matrix = np.matrix(R_lst) #size: nr of sats * 1
                 #print R_matrix
 
-                W_matrix = np.matrix(W_lst)
-                W_matrix = np.diagflat(W_matrix)
+                W_matrix = np.matrix(W_lst) #size: nr of sats * 1
+                W_matrix = np.diagflat(W_matrix) #size: nr of sats * nr of sats (squared matrix)
                 #print W_matrix
 
-                k = np.dot(A_matrix.transpose(),W_matrix)
-                #print k  
+                k1 = np.dot(A_matrix.transpose(),W_matrix) #(4*nr of sats) * (nr of sats*nr of sats) --> 4 * nr of sats
+                #print k1  
 
-                s = np.linalg.inv(np.dot(k,A_matrix))
+                s = np.linalg.inv(np.dot(k1,A_matrix)) #size: (4*nr of sats) * (nr of sats*4) --> 4*4
                 #print s
-                k2 = np.dot(A_matrix.transpose(),W_matrix)
+                
+                k2 = np.dot(k1,R_matrix) #size: (4*nr of sats) * (nr of sats*1) --> 4*1
                 #print k2
                 
-                k3 = np.dot(k2,R_matrix)
-                #print k3
-                
-                xfin = np.dot(s,k3)
+                xfin = np.dot(s,k2) #size: (4*4) * (4*1) --> 4*1
                 #print xfin
                 
                 dX_coord = xfin[0]
@@ -767,7 +785,8 @@ for obs_idx, epoch in enumerate(data['observations']):
                 dT = xfin[3]
                 #print dT
 
-                res = np.dot(A_matrix,xfin)-R_matrix
+                #residuals
+                res = np.dot(A_matrix,xfin)-R_matrix #size: (nr of sats*4) * (4*1) --> nr of sats * 1
                 #print res
 
                 approx_x = float(approx_x + dX_coord)
@@ -792,10 +811,10 @@ for obs_idx, epoch in enumerate(data['observations']):
         print lat, lon, h
         
         #compute errors
-        (m,n)=A_matrix.shape
-        desv1=np.dot(res.transpose(),W_matrix)
-        desv2=np.dot(desv1,res)
-        des=desv2/(m-n)
+        (m,n)=A_matrix.shape #size: nr of sats * 4
+        desv1=np.dot(res.transpose(),W_matrix) #size: (1*nr of sats) * (nr of sats*nr of sats) --> 1*nr of sats
+        desv2=np.dot(desv1,res) #size: (1*nr of sats) * (nr of sats*1) --> 1*1
+        des=desv2/(m-n) #1/(nr of sats-4)
 
         desx=math.sqrt(des*s[0,0])
         xerrors.append(desx)
@@ -828,9 +847,9 @@ mean_zerror = np.mean(zerrors)
 
 print mean_xerror, mean_yerror, mean_zerror
 
-##########################################################
-### write solutions to file and map navigations points ###
-##########################################################
+################################################################
+### write solutions to file, plot and map navigations points ###
+################################################################
 
 mymap = pygmaps.maps(lat, lon, 13)
 
