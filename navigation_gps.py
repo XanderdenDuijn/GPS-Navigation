@@ -42,8 +42,7 @@ for i,line in enumerate(obs_file):
             delta_hen.append(hen_value)
         obs_header.append(delta_hen)   
     elif '# / TYPES OF OBSERV' in line:
-        ##### UPDATE REQUIREDDD!!!!!! #####
-        # iterate over line with steps of 6 chars, starting at 6
+        # iterate over line with steps of 6 chars
         # 9 iterations = nr of possible observation types in 1 line
         for idx in range(0,60,6):
             obs_type = line[idx:idx+6].strip()
@@ -51,11 +50,16 @@ for i,line in enumerate(obs_file):
        
     elif 'TIME OF FIRST OBS' in line:
         ### make nice ###
-        obs_header.append(line)
+        first_obs = []
+        for idx in range(0,30,6):
+            first_obs.append(line[idx:idx+6].strip())
+        first_obs.append(line[30:43].strip())
+        first_obs.append(line[43:51].strip())
+        obs_header.append(first_obs)
     elif 'END OF HEADER' in line:
         break   
 
-
+#update list of observations from header
 obs_types = [] #final list for observation 
 obs_nr = obs_types_temp[0] #the first item is the number of satellites
 obs_types_temp.pop(0) #remove nr of satellites from obs_types
