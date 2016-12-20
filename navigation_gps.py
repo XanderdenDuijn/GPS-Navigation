@@ -1,4 +1,4 @@
-from pyproj import Proj, transform
+#from pyproj import Proj, transform
 import math
 import numpy as np
 from conversions import *
@@ -8,6 +8,10 @@ import pygmaps
 import webbrowser
 import os
 import matplotlib.pyplot as plt
+#import matplotlib.dates as plt_dates
+import datetime
+
+import plots
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -802,11 +806,14 @@ for obs_idx, epoch in enumerate(data['observations']):
         
         print desx,desy,desz
 
+        y = data['observations'][obs_idx]['year']
+        m = data['observations'][obs_idx]['month']
+        d = data['observations'][obs_idx]['day']
         hh = data['observations'][obs_idx]['hour']
         mm = data['observations'][obs_idx]['min']
         ss = data['observations'][obs_idx]['sec']
 
-        solutions.append([hh,mm,ss,approx_x,approx_y,approx_z,desx,desy,desz,lat,lon,h])
+        solutions.append([y,m,d,hh,mm,ss,approx_x,approx_y,approx_z,desx,desy,desz,lat,lon,h])
         
         #break
     else:
@@ -831,32 +838,77 @@ final_x = []
 final_y = []
 final_lat = []
 final_lon = []
+final_time = []
+final_h = []
 
 for solution in solutions:
     #check if error is less than 1.5 * mean error
-    hh = solution[0]
-    mm = solution[1]
-    ss = solution[2]
-    x = solution[3]
-    y = solution[4]
-    z = solution[5]
-    xerror = solution[6]
-    yerror = solution[7]
-    zerror = solution[8]
-    lat = solution[9]
-    lon = solution[10]
-    h = solution[11]
+    year = solution[0]
+    month = solution[1]
+    day = solution[2]
+    hh = solution[3]
+    mm = solution[4]
+    ss = solution[5]
+    sec,dec = divmod(ss,1)
+    sec = int(sec)
+    dec = int(dec*1e+6)
+    x = solution[6]
+    y = solution[7]
+    z = solution[8]
+    xerror = solution[9]
+    yerror = solution[10]
+    zerror = solution[11]
+    lat = solution[12]
+    lon = solution[13]
+    h = solution[14]
     #only use the ones with a error less than 1.5*mean_error
     if xerror < 1.5*mean_xerror and yerror < 1.5*mean_yerror and zerror < 1.5*mean_zerror:
+        #lists for xy plot
         final_x.append(x)
         final_y.append(y)
+        #lists for latlon plot
         final_lat.append(lat)
         final_lon.append(lon)
+        #lists for h plot
+        final_time.append(datetime.datetime(year,month,day,hh,mm,sec,dec))
+        final_h.append(h)
         writer.writerow([hh,mm,ss,x,y,z,xerror,yerror,zerror,lat,lon,h])
         mymap.addradpoint(lat, lon, 3, "#FF0000")
 
-#plots
-plt.plot(final_y, final_x) #y,x
+output.close()
+
+### plots
+
+#h plot
+##t_lst = [i for i in range(len(final_h))]
+##print t_lst
+##print final_h
+
+#plots.plot_th(final_time,final_h)
+
+##plt.plot_date(t_lst, final_h) 
+###plt.gcf().autofmt_xdate()
+###range_x = max(final_time)-min(final_time)
+###range_y = max(final_h)-min(final_h)
+###axes.set_xlim([min(final_time)-0.1*range_x,max(final_time)+0.1*range_x])
+###axes.set_ylim([min(final_h)-0.1*range_y,max(final_h)+0.1*range_y])
+##plt.xlabel('time')
+##plt.ylabel('h')
+##plt.title('height')
+##plt.grid(True)
+##plt.savefig("height.png")
+###plt.show()
+
+#plots.plot_xy(final_x,final_y)
+
+#xy plot
+plt.plot(final_x, final_y)
+range_x = max(final_x)-min(final_x)
+range_y = max(final_y)-min(final_y)
+axes = plt.gca()
+axes.set_xlim([min(final_x)-0.1*range_x,max(final_x)+0.1*range_x])
+axes.set_ylim([min(final_y)-0.1*range_y,max(final_y)+0.1*range_y])
+#plt.gca().invert_yaxis()
 plt.xlabel('x')
 plt.ylabel('y')
 plt.title('x y')
@@ -864,15 +916,24 @@ plt.grid(True)
 plt.savefig("xy.png")
 #plt.show()
 
-
-plt.plot(final_lat, final_lon) #y,x
+#latlon plot
+plt.plot(final_lon, final_lat) 
+axes = plt.gca()
+range_x = max(final_lon)-min(final_lon)
+range_y = max(final_lat)-min(final_lat)
+axes.set_xlim([min(final_lon)-0.1*range_x,max(final_lon)+0.1*range_x])
+axes.set_ylim([min(final_lat)-0.1*range_y,max(final_lat)+0.1*range_y])
 plt.xlabel('lon')
 plt.ylabel('lat')
 plt.title('lat lon')
 plt.grid(True)
 plt.savefig("latlon.png")
+#plt.plot()
 
-output.close()
+
+
+
+### create map
 
 fname = 'solutions'
 #create map file
