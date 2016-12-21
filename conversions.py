@@ -1,4 +1,5 @@
 from math import *
+import numpy as np
 
 def GDtoJD(d,m,y,hh,mm,ss):
     #representing time as a real number
@@ -38,15 +39,23 @@ def xyztolatlonh(x,y,z):
     lat = lat * (180/pi)
     lon = lon * (180/pi)
     return lat,lon,h
-###from xyz lat lon to enu
-##def xyzlatlon(x,y,z,lat,lon):
-##    e = -math.sin(lon)*x+math.cos(lon)*y
-##    n = -math.sin(lat)*math.cos(lon)*x-math.sin(lat)*math.sin(lon)*y+math.cos(lat)*z
-##    u = math.cos(lat)*math.cos(lon)*x+math.cos(lat)*math,sin(lon)*y+mat.sin(lat)*z
-##    return e,n,u
-##
-##def enulatlon(e,n,u,lat,lon):
-##    x=-math.sin(lon)*e-math.sin(lat)*math.cos(lon)*n+math.cos(lat)*math.cos(lon)*u;
-##    y=math.cos(lon)*e-math.sin(lat)*math.sin(lon)*n+math.cos(lat)*math.sin(lon)*u;
-##    z=0+math.cos(lat)*n+math.sin(lat)*u
-##    return x,y,z
+
+def Elev_Az(NEh):
+    # HD : Distancia horizontal
+    # NEh : Coordenadas cartesianas (N, E, h)
+    
+    # Horizontal distance
+    HD = (NEh[0]**2 + NEh[1]**2)**0.5
+
+
+    if abs(HD/NEh[2]) <= 0.0001:
+        El = pi/2
+    else:
+        El = np.arctan2(NEh[2], HD)
+
+    Az = np.arctan2(NEh[1], NEh[0])
+    if Az<0:
+        Az += 2*pi
+
+    return El, Az
+
