@@ -8,7 +8,6 @@ import math
 import numpy as np
 from conversions import *
 import csv
-import Elev_Az
 import pygmaps
 import webbrowser
 import os
@@ -592,7 +591,7 @@ for obs_idx, epoch in enumerate(data['observations']):
                         NEh = np.dot(R31,dX) 
                         NEh = [NEh[0][0],NEh[1][0],NEh[2][0]]
                         #print NEh
-                        El_rad, Az_rad = Elev_Az.El_Az(NEh) #in radians
+                        El_rad, Az_rad = Elev_Az(NEh) #in radians
                         #print El_rad, Az_rad
                         El_degr = El_rad * (180.0/math.pi) #convert to degrees
                         Az_degr = Az_rad * (180.0/math.pi) #convert to degrees
