@@ -1,4 +1,9 @@
-#from pyproj import Proj, transform
+#-------------------------------------------#
+#   POST-PROCESS GPS NAVIGATION SOFTWARE    #
+#   BY XANNDER DEN DUIJN AND TONI PRATS     #
+#-------------------------------------------#
+
+
 import math
 import numpy as np
 from conversions import *
@@ -8,10 +13,7 @@ import pygmaps
 import webbrowser
 import os
 import matplotlib.pyplot as plt
-#import matplotlib.dates as plt_dates
 import datetime
-
-#import plots
 
 ####################################
 ### READING THE OBSERVATION FILE ###
@@ -41,15 +43,13 @@ for i,line in enumerate(obs_file):
             hen_value = float(line[idx:idx+14].strip())
             delta_hen.append(hen_value)
         obs_header.append(delta_hen)   
-    elif '# / TYPES OF OBSERV' in line:
+    elif '# / TYPES OF OBSERV' in line: #there could be more lines
         # iterate over line with steps of 6 chars
-        # 9 iterations = nr of possible observation types in 1 line
+        # 9 iterations = nr of possible observation types in 1 line           
         for idx in range(0,60,6):
             obs_type = line[idx:idx+6].strip()
-            obs_types_temp.append(line[idx:idx+6].strip())
-       
+            obs_types_temp.append(line[idx:idx+6].strip())     
     elif 'TIME OF FIRST OBS' in line:
-        ### make nice ###
         first_obs = []
         for idx in range(0,30,6):
             first_obs.append(line[idx:idx+6].strip())
@@ -64,7 +64,7 @@ obs_types = [] #final list for observation
 obs_nr = obs_types_temp[0] #the first item is the number of satellites
 obs_types_temp.pop(0) #remove nr of satellites from obs_types
 for obs_type in obs_types_temp:
-    if obs_type: #if there is a observation type
+    if obs_type: #if the observation is not an empty string..
         obs_types.append(obs_type)
 obs_header.insert(2,obs_types) #put the list of observations in the correct spot
         
@@ -747,14 +747,12 @@ for obs_idx, epoch in enumerate(data['observations']):
                 else:
                     print 'this is not a gps satellite'
                     continue
-            print
-            print 
-            print 'ITERATED OVER ALL GOOD SATELLITES'
+            print 'ITERATED OVER ALL SUITABLE SATELLITES'
 
             # calculate receivers position when there are at keast 4 proper sats on the sky
             if len(A_lst)>=4: #we use A_lst here, but we could use R_lst and W_lst as well
                 ### LEAST SQUARED SOLUTIONS ###
-                print 'yes we can calculate the receivers position'
+                #print 'yes we can calculate the receivers position'
 
                 #print A_lst
                 #print len(A_lst)
@@ -803,12 +801,9 @@ for obs_idx, epoch in enumerate(data['observations']):
                 #print dTrec
                    
             else:
-                print 'There are not enough good satellites to calc the receivers position'
-                
-            #print 'give it to me baby. Dame lo nena'
-            
+                print 'There are not enough suitable satellites to calc the receivers position'            
           
-        print 'Dame los coordenades'
+        print 'Dame los coordenadas'
 
         print approx_x, approx_y, approx_z
         lat,lon,h = xyztolatlonh(approx_x,approx_y, approx_z)
@@ -845,15 +840,14 @@ for obs_idx, epoch in enumerate(data['observations']):
         continue
     #break
 
-mean_xerror = np.mean(xerrors)
-mean_yerror = np.mean(yerrors)
-mean_zerror = np.mean(zerrors)
-
-print mean_xerror, mean_yerror, mean_zerror
 
 ################################################################
 ### write solutions to file, plot and map navigations points ###
 ################################################################
+
+mean_xerror = np.mean(xerrors)
+mean_yerror = np.mean(yerrors)
+mean_zerror = np.mean(zerrors)
 
 mymap = pygmaps.maps(lat, lon, 13)
 
@@ -861,10 +855,13 @@ final_x = []
 final_y = []
 final_lat = []
 final_lon = []
-final_time = []
 final_h = []
+final_epoch = []
 
-for solution in solutions:
+final_hfrac = []
+final_time = []
+
+for idx, solution in enumerate(solutions):
     #check if error is less than 1.5 * mean error
     year = solution[0]
     month = solution[1]
@@ -875,6 +872,7 @@ for solution in solutions:
     sec,dec = divmod(ss,1)
     sec = int(sec)
     dec = int(dec*1e+6)
+    
     x = solution[6]
     y = solution[7]
     z = solution[8]
@@ -885,44 +883,50 @@ for solution in solutions:
     lon = solution[13]
     h = solution[14]
     #only use the ones with a error less than 1.5*mean_error
-    if xerror < 1.5*mean_xerror and yerror < 1.5*mean_yerror and zerror < 1.5*mean_zerror:
+    if xerror < (1.5*mean_xerror) and yerror < (1.5*mean_yerror) and zerror < (1.5*mean_zerror):
         #lists for xy plot
         final_x.append(x)
         final_y.append(y)
         #lists for latlon plot
         final_lat.append(lat)
         final_lon.append(lon)
-        #lists for h plot
-        final_time.append(datetime.datetime(year,month,day,hh,mm,sec,dec))
+        
+        #lists for height plot
+        #this works
         final_h.append(h)
+        final_epoch.append(idx)
+        #this does not work
+        final_time.append(datetime.datetime(year,month,day,hh,mm,sec,dec)) #somehow this does not work...
+
+        #write to csv file
         writer.writerow([hh,mm,ss,x,y,z,xerror,yerror,zerror,lat,lon,h])
+
+        #map circles on google map
         mymap.addradpoint(lat, lon, 3, "#FF0000")
 
 output.close()
 
 ### plots
 
-#h plot
-##t_lst = [i for i in range(len(final_h))]
-##print t_lst
-##print final_h
+#height plot
 
-#plots.plot_th(final_time,final_h)
+plt.plot(final_epoch, final_h) 
+plt.xlabel('epoch')
+plt.ylabel('height(m)')
+plt.title('height')
+plt.grid(True)
+plt.savefig("height.png")
+#plt.show()
 
-##plt.plot_date(t_lst, final_h) 
+###plot
+##plt.plot(final_time, final_h)
 ###plt.gcf().autofmt_xdate()
-###range_x = max(final_time)-min(final_time)
-###range_y = max(final_h)-min(final_h)
-###axes.set_xlim([min(final_time)-0.1*range_x,max(final_time)+0.1*range_x])
-###axes.set_ylim([min(final_h)-0.1*range_y,max(final_h)+0.1*range_y])
 ##plt.xlabel('time')
 ##plt.ylabel('h')
 ##plt.title('height')
 ##plt.grid(True)
 ##plt.savefig("height.png")
 ###plt.show()
-
-#plots.plot_xy(final_x,final_y)
 
 #xy plot
 plt.plot(final_x, final_y)
@@ -932,8 +936,8 @@ axes = plt.gca()
 axes.set_xlim([min(final_x)-0.1*range_x,max(final_x)+0.1*range_x])
 axes.set_ylim([min(final_y)-0.1*range_y,max(final_y)+0.1*range_y])
 #plt.gca().invert_yaxis()
-plt.xlabel('x')
-plt.ylabel('y')
+plt.xlabel('x(m)')
+plt.ylabel('y(m)')
 plt.title('x y')
 plt.grid(True)
 plt.savefig("xy.png")
@@ -952,8 +956,6 @@ plt.title('lat lon')
 plt.grid(True)
 plt.savefig("latlon.png")
 #plt.plot()
-
-
 
 
 ### create map
